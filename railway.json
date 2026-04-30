@@ -5,7 +5,7 @@
     "watchPatterns": ["backend/**", "frontend/**"]
   },
   "deploy": {
-    "startCommand": "node backend/setup-db.js && node backend/dist/server.js",
+    "startCommand": "node start.js",
     "healthcheckPath": "/api/health",
     "restartPolicyType": "ON_FAILURE"
   }
