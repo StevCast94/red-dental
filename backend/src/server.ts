@@ -257,7 +257,7 @@ app.put('/api/profile/password', authenticate, async (req: AuthRequest, res) => 
 // En producción, servir el frontend estático
 if (process.env.NODE_ENV === 'production') {
   const path = require('path');
-  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  const frontendPath = path.join(__dirname, '../frontend/dist');
   app.use(express.static(frontendPath));
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {

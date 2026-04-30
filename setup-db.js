@@ -4,7 +4,7 @@ const fs = require('fs');
 
 // Si DATABASE_URL comienza con postgresql, usar schema de PostgreSQL
 const dbUrl = process.env.DATABASE_URL || '';
-const schemaDir = path.join(__dirname, '..', 'prisma');
+const schemaDir = path.join(__dirname, 'backend', 'prisma');
 
 if (dbUrl.startsWith('postgresql://')) {
   console.log('🔄 PostgreSQL detected, switching schema...');
@@ -19,11 +19,11 @@ if (dbUrl.startsWith('postgresql://')) {
 
 // Generate Prisma client
 console.log('🔄 Generating Prisma client...');
-execSync('npx prisma generate', { stdio: 'inherit', cwd: __dirname });
+execSync('npx prisma generate', { stdio: 'inherit', cwd: path.join(__dirname, 'backend') });
 
 // Push schema to database
 console.log('🔄 Pushing schema...');
-execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', cwd: __dirname });
+execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', cwd: path.join(__dirname, 'backend') });
 
 // Seed admin user if no users exist
 console.log('🔄 Checking for seed data...');
