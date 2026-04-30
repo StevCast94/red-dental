@@ -5,7 +5,7 @@
     "buildCommand": "cd backend && npm install && npm run build && cd ../frontend && npm install && npx vite build"
   },
   "deploy": {
-    "startCommand": "cd backend && npx prisma db push --accept-data-loss && node dist/server.js",
+    "startCommand": "cd backend && node setup-db.js && node dist/server.js",
     "healthcheckPath": "/api/health",
     "restartPolicyType": "ON_FAILURE"
   }
