@@ -5,6 +5,7 @@ RUN npm install
 COPY backend/tsconfig.json ./
 COPY backend/src ./src
 COPY backend/prisma ./prisma
+COPY backend/setup-db.js ./
 RUN npx prisma generate
 RUN npm run build
 
