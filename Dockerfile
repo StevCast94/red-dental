@@ -26,4 +26,4 @@ COPY --from=backend-build /app/backend/setup-db.js ./backend/setup-db.js
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 ENV NODE_ENV=production
 EXPOSE 5000
-CMD cd backend && node setup-db.js && node dist/server.js
+CMD ["sh", "-c", "cd backend && node setup-db.js && node dist/server.js"]
