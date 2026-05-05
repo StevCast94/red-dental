@@ -3,17 +3,76 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Clinic {
+  id            String              @id @default(uuid())
+  name          String              @unique
+  slug          String              @unique
+  active        Boolean             @default(true)
+  address       String?
+  phone         String?
+  contactEmail  String?
+  users         User[]
+  patients      Patient[]
+  subscription  ClinicSubscription?
+  loginLogs     LoginLog[]
+  paymentReceipts PaymentReceipt[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model ClinicSubscription {
+  id          String   @id @default(uuid())
+  clinicId    String   @unique
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  plan        String   @default("MONTHLY")
+  amount      Float    @default(100)
+  startDate   DateTime @default(now())
+  nextBilling DateTime
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LoginLog {
+  id        String   @id @default(uuid())
+  username  String
+  clinicId  String?
+  clinic    Clinic?  @relation(fields: [clinicId], references: [id])
+  success   Boolean
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+model PaymentReceipt {
+  id          String   @id @default(uuid())
+  clinicId    String
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  amount      Float
+  method      String   @default("TRANSFER")
+  reference   String?
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  receiptUrl  String?
+  notes       String?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model User {
   id           String        @id @default(uuid())
   name         String
   email        String        @unique
+  username     String        @unique
   password     String
   role         String        @default("ORTHODONTIST")
   active       Boolean       @default(true)
+  clinicId     String?
+  clinic       Clinic?       @relation(fields: [clinicId], references: [id])
   patients     Patient[]     @relation("ResponsibleOrthodontist")
   appointments Appointment[] @relation("OrthodontistAppointments")
   createdAt    DateTime      @default(now())
@@ -42,12 +101,15 @@ model Patient {
   email           String?
   address         String?
   clinicalHistory String?
+  clinicId        String
+  clinic          Clinic        @relation(fields: [clinicId], references: [id])
   orthodontistId  String
   orthodontist    User          @relation("ResponsibleOrthodontist", fields: [orthodontistId], references: [id])
   appointments    Appointment[]
   treatments      Treatment[]
   payments        Payment[]
   toothRecords    ToothRecord[]
+  deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
@@ -64,6 +126,7 @@ model Appointment {
   orthodontist   User       @relation("OrthodontistAppointments", fields: [orthodontistId], references: [id])
   evolution      Evolution?
   payments       Payment[]
+  deletedAt      DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 }
@@ -74,7 +137,6 @@ model Treatment {
   startDate       DateTime      @default(now())
   estimatedMonths Int
   active          Boolean       @default(true)
-  totalCost       Float?
   phases          String?
   patientId       String
   patient         Patient       @relation(fields: [patientId], references: [id])
@@ -86,29 +148,31 @@ model Treatment {
 }
 
 model Evolution {
-  id            String      @id @default(uuid())
-  date          DateTime    @default(now())
-  observations  String
-  photoBefore   String?
-  photoAfter    String?
-  treatmentId   String
-  treatment     Treatment   @relation(fields: [treatmentId], references: [id])
-  appointmentId String?     @unique
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  id              String      @id @default(uuid())
+  date            DateTime    @default(now())
+  observations    String
+  photoBefore     String?
+  photoAfter      String?
+  treatmentId     String
+  treatment       Treatment   @relation(fields: [treatmentId], references: [id])
+  appointmentId   String?     @unique
+  appointment     Appointment? @relation(fields: [appointmentId], references: [id])
+  createdByUserId String?
 }
 
 model Payment {
-  id            String      @id @default(uuid())
-  amount        Float
-  method        String
-  date          DateTime    @default(now())
-  note          String?
-  patientId     String
-  patient       Patient     @relation(fields: [patientId], references: [id])
-  treatmentId   String
-  treatment     Treatment   @relation(fields: [treatmentId], references: [id])
-  appointmentId String?
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  id              String      @id @default(uuid())
+  amount          Float
+  method          String
+  date            DateTime    @default(now())
+  note            String?
+  patientId       String
+  patient         Patient     @relation(fields: [patientId], references: [id])
+  treatmentId     String
+  treatment       Treatment   @relation(fields: [treatmentId], references: [id])
+  appointmentId   String?
+  appointment     Appointment? @relation(fields: [appointmentId], references: [id])
+  createdByUserId String?
 }
 
 model InventoryItem {

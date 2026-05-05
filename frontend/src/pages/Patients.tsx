@@ -2,15 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
-async function downloadCsv(url: string, filename: string) {
-  const res = await axios.get(url, { responseType: 'blob' });
-  const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
@@ -25,6 +16,11 @@ interface Patient {
   createdAt?: string;
   orthodontist?: { name: string } | null;
   treatments?: { id: string; type: string; active: boolean }[];
+}
+
+function getDaysInMonth(month: number, year: number): number {
+  if (!month || !year) return 31;
+  return new Date(year, month, 0).getDate();
 }
 
 const emptyForm = {
@@ -44,17 +40,24 @@ export default function Patients() {
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {
     loadPatients();
-  }, [search]);
+  }, [search, page]);
 
   const loadPatients = () => {
-    const url = search ? `/api/patients?search=${encodeURIComponent(search)}` : '/api/patients';
+    let url = `/api/patients?page=${page}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
     axios.get(url)
-      .then(res => setPatients(res.data))
+      .then(res => {
+        const { data, totalPages: tp } = res.data ?? { data: res.data, totalPages: 1 };
+        setPatients(data ?? res.data);
+        setTotalPages(tp ?? 1);
+      })
       .catch(() => {});
   };
 
@@ -79,7 +82,9 @@ export default function Patients() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = { ...form, birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : null };
+    const birthStr = form.birthDate;
+    const isComplete = birthStr && birthStr.split('-').filter(Boolean).length === 3;
+    const payload = { ...form, birthDate: isComplete ? new Date(birthStr + 'T12:00:00').toISOString() : null };
 
     if (editingPatient) {
       axios.put(`/api/patients/${editingPatient.id}`, payload)
@@ -122,13 +127,7 @@ export default function Patients() {
             <p className="text-sm text-gray-500 mt-1">Gestiona la información de tus pacientes</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => downloadCsv('/api/export/patients', 'pacientes.csv')}
-              className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm"
-            >
-              📥 Exportar CSV
-            </button>
-            <button
+<button
               onClick={openCreateModal}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
@@ -156,13 +155,13 @@ export default function Patients() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Teléfono</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">F. Nacimiento</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tratamientos</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ortodoncista</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Teléfono</th>
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">F. Nacimiento</th>
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tratamientos</th>
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ortodoncista</th>
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -175,7 +174,7 @@ export default function Patients() {
                 </tr>
               ) : (
                 patients.map(p => (
-                  <tr key={p.id} className="hover:bg-gray-50">
+                  <tr key={p.id} className="hidden md:table-row hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <Link to={`/patients/${p.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">
                         {p.firstName} {p.lastName}
@@ -221,7 +220,57 @@ export default function Patients() {
               )}
             </tbody>
           </table>
+
+          {/* Mobile cards */}
+          {patients.length > 0 && (
+            <div className="block md:hidden p-4 space-y-3">
+              {patients.map(p => (
+                <div key={p.id} className="bg-white rounded-lg shadow-sm border p-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <Link to={`/patients/${p.id}`} className="font-medium text-blue-600 hover:underline">
+                        {p.firstName} {p.lastName}
+                      </Link>
+                      <p className="text-sm text-gray-500">{p.phone}</p>
+                      <p className="text-xs text-gray-400">{p.email || '-'}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEditModal(p)}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => setDeleteConfirm(p.id)}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                          title="Eliminar"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t text-xs text-gray-400 flex justify-between">
+                    <span>Ortodoncista: {p.orthodontist?.name || '-'}</span>
+                    <span>{p.treatments?.filter(t => t.active).length || 0} trat. activos</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 px-4 py-3 border-t border-gray-200">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+              className="px-3 py-1 border rounded text-sm disabled:opacity-50">Anterior</button>
+            <span className="text-sm text-gray-600">Página {page} de {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+              className="px-3 py-1 border rounded text-sm disabled:opacity-50">Siguiente</button>
+          </div>
+        )}
       </div>
 
       {/* Modal crear/editar paciente */}
@@ -258,13 +307,82 @@ export default function Patients() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Nacimiento</label>
-                <input
-                  type="date"
-                  value={form.birthDate}
-                  onChange={e => setForm({ ...form, birthDate: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fecha de Nacimiento</label>
+                <div className="flex gap-2">
+                  <select
+                    value={form.birthDate ? form.birthDate.split('-')[0] || '' : ''}
+                    onChange={e => {
+                      const parts = form.birthDate ? form.birthDate.split('-') : ['', '', ''];
+                      const y = e.target.value;
+                      const m = parts[1] || '';
+                      const d = parts[2] || '';
+                      // Reset day if not valid for new year+month
+                      const maxDay = getDaysInMonth(Number(m), Number(y));
+                      const validDay = d && Number(d) <= maxDay ? d : '';
+                      setForm({ ...form, birthDate: validDay && m && y ? `${y}-${m}-${validDay}` : `${y || ''}-${m || ''}-${validDay || ''}` });
+                    }}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Año</option>
+                    {Array.from({ length: 100 }, (_, i) => String(new Date().getFullYear() - i)).map(a => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={form.birthDate ? form.birthDate.split('-')[1] || '' : ''}
+                    onChange={e => {
+                      const parts = form.birthDate ? form.birthDate.split('-') : ['', '', ''];
+                      const y = parts[0] || '';
+                      const m = e.target.value;
+                      const d = parts[2] || '';
+                      // Reset day if not valid for this month
+                      const maxDay = getDaysInMonth(Number(m), Number(y));
+                      const validDay = d && Number(d) <= maxDay ? d : '';
+                      setForm({ ...form, birthDate: validDay && m && y ? `${y}-${m}-${validDay}` : `${y || ''}-${m || ''}-${validDay || ''}` });
+                    }}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Mes</option>
+                    {[
+                      { v: '01', l: 'Enero' },
+                      { v: '02', l: 'Febrero' },
+                      { v: '03', l: 'Marzo' },
+                      { v: '04', l: 'Abril' },
+                      { v: '05', l: 'Mayo' },
+                      { v: '06', l: 'Junio' },
+                      { v: '07', l: 'Julio' },
+                      { v: '08', l: 'Agosto' },
+                      { v: '09', l: 'Septiembre' },
+                      { v: '10', l: 'Octubre' },
+                      { v: '11', l: 'Noviembre' },
+                      { v: '12', l: 'Diciembre' },
+                    ].map(m => (
+                      <option key={m.v} value={m.v}>{m.l}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={form.birthDate ? form.birthDate.split('-')[2] || '' : ''}
+                    onChange={e => {
+                      const parts = form.birthDate ? form.birthDate.split('-') : ['', '', ''];
+                      const y = parts[0] || '';
+                      const m = parts[1] || '';
+                      const d = e.target.value;
+                      setForm({ ...form, birthDate: d && m && y ? `${y}-${m}-${d}` : `${y || ''}-${m || ''}-${d || ''}` });
+                    }}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Día</option>
+                    {(() => {
+                      const parts = form.birthDate ? form.birthDate.split('-') : ['', '', ''];
+                      const m = Number(parts[1]) || 0;
+                      const y = Number(parts[0]) || 0;
+                      const days = getDaysInMonth(m, y);
+                      return Array.from({ length: days }, (_, i) => String(i + 1).padStart(2, '0')).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ));
+                    })()}
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono *</label>

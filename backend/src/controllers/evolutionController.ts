@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { clinicFilter } from '../utils/clinicFilter';
 
 const prisma = new PrismaClient();
 
@@ -27,6 +28,14 @@ export const getEvolutions = async (req: AuthRequest, res: Response) => {
 export const createEvolution = async (req: AuthRequest, res: Response) => {
   try {
     const { treatmentId, appointmentId, observations, photoBefore, photoAfter } = req.body;
+    // Verificar que el tratamiento pertenezca a la clínica del usuario
+    const treatment = await prisma.treatment.findFirst({
+      where: {
+        id: treatmentId,
+        patient: { clinicId: req.user?.clinicId },
+      },
+    });
+    if (!treatment) return res.status(404).json({ error: 'Tratamiento no encontrado en esta clínica' });
     const evolution = await prisma.evolution.create({
       data: {
         treatmentId,
@@ -36,6 +45,7 @@ export const createEvolution = async (req: AuthRequest, res: Response) => {
         photoAfter: photoAfter || null,
       },
     });
+    console.log(`[AUDIT] User ${req.user?.id} created evolution ${evolution.id} for treatment ${treatmentId}`);
     res.status(201).json(evolution);
   } catch (error: any) {
     console.error(error);

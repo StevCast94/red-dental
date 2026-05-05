@@ -7,13 +7,72 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Clinic {
+  id            String              @id @default(uuid())
+  name          String              @unique
+  slug          String              @unique
+  active        Boolean             @default(true)
+  address       String?
+  phone         String?
+  contactEmail  String?
+  users         User[]
+  patients      Patient[]
+  subscription  ClinicSubscription?
+  loginLogs     LoginLog[]
+  paymentReceipts PaymentReceipt[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model ClinicSubscription {
+  id          String   @id @default(uuid())
+  clinicId    String   @unique
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  plan        String   @default("MONTHLY")
+  amount      Float    @default(100)
+  startDate   DateTime @default(now())
+  nextBilling DateTime
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LoginLog {
+  id        String   @id @default(uuid())
+  username  String
+  clinicId  String?
+  clinic    Clinic?  @relation(fields: [clinicId], references: [id])
+  success   Boolean
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+model PaymentReceipt {
+  id          String   @id @default(uuid())
+  clinicId    String
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  amount      Float
+  method      String   @default("TRANSFER")
+  reference   String?
+  status      String   @default("PENDING")
+  receiptUrl  String?
+  notes       String?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model User {
   id           String        @id @default(uuid())
   name         String
   email        String        @unique
+  username     String        @unique
   password     String
   role         String        @default("ORTHODONTIST")
   active       Boolean       @default(true)
+  clinicId     String?
+  clinic       Clinic?       @relation(fields: [clinicId], references: [id])
   patients     Patient[]     @relation("ResponsibleOrthodontist")
   appointments Appointment[] @relation("OrthodontistAppointments")
   createdAt    DateTime      @default(now())
@@ -48,6 +107,8 @@ model Patient {
   treatments      Treatment[]
   payments        Payment[]
   toothRecords    ToothRecord[]
+  clinicId        String
+  clinic          Clinic        @relation(fields: [clinicId], references: [id])
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }

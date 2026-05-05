@@ -1,13 +1,18 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { clinicFilter } from '../utils/clinicFilter';
 
 const prisma = new PrismaClient();
 
 export const getPayments = async (req: AuthRequest, res: Response) => {
   try {
     const { treatmentId, patientId, startDate, endDate } = req.query;
-    const where: any = {};
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const skip = (page - 1) * limit;
+    const cf: any = clinicFilter(req.user);
+    const where: any = { patient: cf };
     if (treatmentId) where.treatmentId = String(treatmentId);
     if (patientId) where.patientId = String(patientId);
     if (startDate || endDate) {
@@ -16,16 +21,21 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
       if (endDate) where.date.lte = new Date(String(endDate));
     }
 
-    const payments = await prisma.payment.findMany({
-      where,
-      include: {
-        patient: { select: { id: true, firstName: true, lastName: true } },
-        treatment: { select: { id: true, type: true } },
-        appointment: { select: { id: true, date: true } },
-      },
-      orderBy: { date: 'desc' },
-    });
-    res.json(payments);
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true } },
+          treatment: { select: { id: true, type: true } },
+          appointment: { select: { id: true, date: true } },
+        },
+        orderBy: { date: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.payment.count({ where }),
+    ]);
+    res.json({ data: payments, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al obtener pagos' });
@@ -34,8 +44,9 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
 
 export const getPaymentById = async (req: AuthRequest, res: Response) => {
   try {
-    const payment = await prisma.payment.findUnique({
-      where: { id: req.params.id },
+    const cf2: any = clinicFilter(req.user);
+    const payment = await prisma.payment.findFirst({
+      where: { id: req.params.id, patient: cf2 },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
         treatment: { select: { id: true, type: true } },
@@ -67,6 +78,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         treatment: { select: { id: true, type: true } },
       },
     });
+    console.log(`[AUDIT] User ${req.user?.id} created payment ${payment.id} for patient ${patientId}`);
     res.status(201).json(payment);
   } catch (error) {
     console.error(error);

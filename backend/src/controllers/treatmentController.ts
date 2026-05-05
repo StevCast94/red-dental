@@ -1,27 +1,37 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { clinicFilter } from '../utils/clinicFilter';
 
 const prisma = new PrismaClient();
 
 export const getTreatments = async (req: AuthRequest, res: Response) => {
   try {
     const { patientId, active } = req.query;
-    const where: any = {};
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const skip = (page - 1) * limit;
+    const cf: any = clinicFilter(req.user);
+    const where: any = { patient: cf };
     if (patientId) where.patientId = String(patientId);
     if (active !== undefined) where.active = active === 'true';
     
-    const treatments = await prisma.treatment.findMany({
-      where,
-      include: {
-        patient: { select: { id: true, firstName: true, lastName: true } },
-        evolutions: { orderBy: { date: 'desc' } },
-        payments: { select: { amount: true } },
-        _count: { select: { evolutions: true } },
-      },
-      orderBy: { startDate: 'desc' },
-    });
-    res.json(treatments);
+    const [treatments, total] = await Promise.all([
+      prisma.treatment.findMany({
+        where,
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true } },
+          evolutions: { orderBy: { date: 'desc' } },
+          payments: { select: { amount: true } },
+          _count: { select: { evolutions: true } },
+        },
+        orderBy: { startDate: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.treatment.count({ where }),
+    ]);
+    res.json({ data: treatments, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al obtener tratamientos' });
@@ -30,8 +40,9 @@ export const getTreatments = async (req: AuthRequest, res: Response) => {
 
 export const getTreatmentById = async (req: AuthRequest, res: Response) => {
   try {
-    const treatment = await prisma.treatment.findUnique({
-      where: { id: req.params.id },
+    const cf2: any = clinicFilter(req.user);
+    const treatment = await prisma.treatment.findFirst({
+      where: { id: req.params.id, patient: cf2 },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
         evolutions: {
@@ -53,6 +64,11 @@ export const getTreatmentById = async (req: AuthRequest, res: Response) => {
 export const createTreatment = async (req: AuthRequest, res: Response) => {
   try {
     const { patientId, type, estimatedMonths, phases } = req.body;
+    // Verificar que el paciente sea de la misma clínica
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, clinicId: req.user?.clinicId }
+    });
+    if (!patient) return res.status(404).json({ error: 'Paciente no encontrado en esta clínica' });
     const treatment = await prisma.treatment.create({
       data: {
         patientId,
@@ -64,6 +80,7 @@ export const createTreatment = async (req: AuthRequest, res: Response) => {
         patient: { select: { id: true, firstName: true, lastName: true } },
       },
     });
+    console.log(`[AUDIT] User ${req.user?.id} created treatment ${treatment.id} for patient ${patientId}`);
     res.status(201).json(treatment);
   } catch (error) {
     console.error(error);

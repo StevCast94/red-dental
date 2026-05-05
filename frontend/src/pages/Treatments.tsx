@@ -26,6 +26,12 @@ const treatmentLabels: Record<string, string> = {
   INVISIBLE_ALIGNERS: 'Alineadores Invisibles',
   LINGUAL_ORTHODONTICS: 'Ortodoncia Lingual',
   INTERCEPTIVE_ORTHODONTICS: 'Ortodoncia Interceptiva',
+  EXODONCIA: 'Exodoncia',
+  ENDODONCIA: 'Endodoncia',
+  PROTESIS_REMOVIBLE: 'Prótesis Removible',
+  PROTESIS_FIJA: 'Prótesis Fija',
+  RADIOGRAFIA: 'Radiografía',
+  OPERATORIO: 'Operatorio',
 };
 
 export default function Treatments() {
@@ -34,15 +40,21 @@ export default function Treatments() {
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [form, setForm] = useState({ patientId: '', type: 'METAL_BRACES', estimatedMonths: 12, phases: '' });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     loadTreatments();
-    axios.get('/api/patients').then(r => setPatients(r.data)).catch(() => {});
-  }, [activeTab]);
+    axios.get('/api/patients').then(r => setPatients(r.data?.data ?? r.data)).catch(() => {});
+  }, [activeTab, page]);
 
   const loadTreatments = () => {
-    axios.get(`/api/treatments?active=${activeTab === 'active'}`)
-      .then(r => setTreatments(r.data))
+    axios.get(`/api/treatments?active=${activeTab === 'active'}&page=${page}`)
+      .then(r => {
+        const { data, totalPages: tp } = r.data ?? { data: r.data, totalPages: 1 };
+        setTreatments(data ?? r.data);
+        setTotalPages(tp ?? 1);
+      })
       .catch(() => {});
   };
 
@@ -127,6 +139,15 @@ export default function Treatments() {
           </div>
         )}
       </div>
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 px-4 py-3 border-t border-gray-200 mt-6 bg-white rounded-xl shadow">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-50">Anterior</button>
+          <span className="text-sm text-gray-600">Página {page} de {totalPages}</span>
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-50">Siguiente</button>
+        </div>
+      )}
 
       {/* Modal Nuevo Tratamiento */}
       {showModal && (

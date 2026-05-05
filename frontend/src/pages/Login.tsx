@@ -1,9 +1,9 @@
-import { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -12,7 +12,7 @@ export default function Login() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await login(email, password);
+      await login(username, password);
       navigate('/dashboard');
     } catch {
       setError('Credenciales inválidas');
@@ -33,13 +33,14 @@ export default function Login() {
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="admin@ortodoncia.com"
+              placeholder="ej: admin.dientes-sanos"
+              autoComplete="username"
               required
             />
           </div>
@@ -51,6 +52,7 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="admin123"
+              autoComplete="current-password"
               required
             />
           </div>
@@ -62,8 +64,7 @@ export default function Login() {
           </button>
         </form>
         <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-500 text-center">Credenciales de prueba:</p>
-          <p className="text-xs text-gray-500 text-center">admin@ortodoncia.com / admin123</p>
+          <p className="text-xs text-gray-500 text-center">Accede con tu usuario y contraseña</p>
         </div>
       </div>
     </div>

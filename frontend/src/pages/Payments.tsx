@@ -2,16 +2,6 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import Layout from '../components/Layout';
 
-async function downloadCsv(url: string, filename: string) {
-  const res = await axios.get(url, { responseType: 'blob' });
-  const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 interface Payment {
   id: string;
   amount: number;
@@ -50,6 +40,12 @@ const treatmentLabels: Record<string, string> = {
   INVISIBLE_ALIGNERS: 'Alineadores Invisibles',
   LINGUAL_ORTHODONTICS: 'Ortodoncia Lingual',
   INTERCEPTIVE_ORTHODONTICS: 'Ortodoncia Interceptiva',
+  EXODONCIA: 'Exodoncia',
+  ENDODONCIA: 'Endodoncia',
+  PROTESIS_REMOVIBLE: 'Prótesis Removible',
+  PROTESIS_FIJA: 'Prótesis Fija',
+  RADIOGRAFIA: 'Radiografía',
+  OPERATORIO: 'Operatorio',
 };
 
 export default function Payments() {
@@ -67,15 +63,21 @@ export default function Payments() {
     treatmentId: '',
     appointmentId: '',
   });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     loadPayments();
-    axios.get('/api/patients').then(r => setPatients(r.data)).catch(() => {});
-    axios.get('/api/treatments?active=true').then(r => setTreatments(r.data)).catch(() => {});
-  }, []);
+    axios.get('/api/patients').then(r => setPatients(r.data?.data ?? r.data)).catch(() => {});
+    axios.get('/api/treatments?active=true').then(r => setTreatments(r.data?.data ?? r.data)).catch(() => {});
+  }, [page]);
 
   const loadPayments = () => {
-    axios.get('/api/payments').then(r => setPayments(r.data)).catch(() => {});
+    axios.get(`/api/payments?page=${page}`).then(r => {
+      const { data, totalPages: tp } = r.data ?? { data: r.data, totalPages: 1 };
+      setPayments(data ?? r.data);
+      setTotalPages(tp ?? 1);
+    }).catch(() => {});
   };
 
   const openNew = () => {
@@ -136,13 +138,7 @@ export default function Payments() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Pagos</h1>
         <div className="flex gap-2">
-          <button
-            onClick={() => downloadCsv('/api/export/payments', 'pagos.csv')}
-            className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm"
-          >
-            📥 Exportar CSV
-          </button>
-          <button onClick={openNew} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+<button onClick={openNew} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
             + Registrar Pago
           </button>
         </div>
@@ -160,18 +156,18 @@ export default function Payments() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600">
             <tr>
-              <th className="text-left px-4 py-3">Fecha</th>
-              <th className="text-left px-4 py-3">Paciente</th>
-              <th className="text-left px-4 py-3">Tratamiento</th>
-              <th className="text-left px-4 py-3">Monto</th>
-              <th className="text-left px-4 py-3">Método</th>
-              <th className="text-left px-4 py-3">Nota</th>
-              <th className="text-right px-4 py-3">Acciones</th>
+              <th className="hidden md:table-cell text-left px-4 py-3">Fecha</th>
+              <th className="hidden md:table-cell text-left px-4 py-3">Paciente</th>
+              <th className="hidden md:table-cell text-left px-4 py-3">Tratamiento</th>
+              <th className="hidden md:table-cell text-left px-4 py-3">Monto</th>
+              <th className="hidden md:table-cell text-left px-4 py-3">Método</th>
+              <th className="hidden md:table-cell text-left px-4 py-3">Nota</th>
+              <th className="hidden md:table-cell text-right px-4 py-3">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {payments.map(p => (
-              <tr key={p.id} className="hover:bg-gray-50">
+              <tr key={p.id} className="hidden md:table-row hover:bg-gray-50">
                 <td className="px-4 py-3">{new Date(p.date).toLocaleDateString()}</td>
                 <td className="px-4 py-3 font-medium">{p.patient.firstName} {p.patient.lastName}</td>
                 <td className="px-4 py-3 text-gray-500">{treatmentLabels[p.treatment.type] || p.treatment.type}</td>
@@ -189,11 +185,52 @@ export default function Payments() {
               </tr>
             ))}
             {payments.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-8 text-gray-400">No hay pagos registrados</td></tr>
+              <tr className="hidden md:table-row"><td colSpan={7} className="text-center py-8 text-gray-400">No hay pagos registrados</td></tr>
             )}
           </tbody>
         </table>
+
+        {/* Mobile cards */}
+        {payments.length > 0 && (
+          <div className="block md:hidden p-4 space-y-3">
+            {payments.map(p => (
+              <div key={p.id} className="bg-white rounded-lg shadow-sm border p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium text-gray-900">{p.patient.firstName} {p.patient.lastName}</p>
+                    <p className="text-sm text-gray-500">{treatmentLabels[p.treatment.type] || p.treatment.type}</p>
+                    <p className="text-xs text-gray-400">{new Date(p.date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-green-600">${p.amount.toFixed(2)}</p>
+                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                      {methodLabels[p.method] || p.method}
+                    </span>
+                  </div>
+                </div>
+                {p.note && <p className="text-xs text-gray-400 mt-1">{p.note}</p>}
+                <div className="flex gap-2 mt-3 pt-2 border-t justify-end">
+                  <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline text-xs">Editar</button>
+                  <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:underline text-xs">Eliminar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {payments.length === 0 && (
+          <div className="block md:hidden text-center py-8 text-gray-400">No hay pagos registrados</div>
+        )}
       </div>
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 px-4 py-3 border-t border-gray-200 mt-6 bg-white rounded-xl shadow">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-50">Anterior</button>
+          <span className="text-sm text-gray-600">Página {page} de {totalPages}</span>
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-50">Siguiente</button>
+        </div>
+      )}
 
       {/* Modal */}
       {showModal && (

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -14,6 +14,10 @@ export default function PrivateRoute({ children, requireRole }: { children: Reac
   }
 
   if (!user) return <Navigate to="/login" />;
-  if (requireRole && user.role !== requireRole) return <Navigate to="/dashboard" />;
+  if (requireRole && user.role !== requireRole) {
+    // Si es SUPER_ADMIN y no tiene el rol requerido, mandarlo al panel admin
+    if (user.role === 'SUPER_ADMIN') return <Navigate to="/admin" />;
+    return <Navigate to="/dashboard" />;
+  }
   return <>{children}</>;
 }

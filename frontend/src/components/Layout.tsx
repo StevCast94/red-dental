@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,11 +44,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <Link to="/patients" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
                   Pacientes
                 </Link>
-                {user?.role === 'ADMIN' && (
-                  <Link to="/admin" className="inline-flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700">
-                    Administrar
-                  </Link>
-                )}
+                {/* Admin link removed — clinics manage users themselves */}
               </div>
             </div>
             <div className="flex items-center space-x-4">

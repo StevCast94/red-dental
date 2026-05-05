@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, DragEvent } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import Layout from '../components/Layout';
@@ -30,13 +30,102 @@ const treatmentLabels: Record<string, string> = {
   INVISIBLE_ALIGNERS: 'Alineadores Invisibles',
   LINGUAL_ORTHODONTICS: 'Ortodoncia Lingual',
   INTERCEPTIVE_ORTHODONTICS: 'Ortodoncia Interceptiva',
+  EXODONCIA: 'Exodoncia',
+  ENDODONCIA: 'Endodoncia',
+  PROTESIS_REMOVIBLE: 'Prótesis Removible',
+  PROTESIS_FIJA: 'Prótesis Fija',
+  RADIOGRAFIA: 'Radiografía',
+  OPERATORIO: 'Operatorio',
 };
+
+function PhotoUploadZone({
+  label,
+  type,
+  photo,
+  dragOver,
+  inputRef,
+  onSelect,
+  onRemove,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  label: string;
+  type: 'before' | 'after';
+  photo: { file: File; preview: string } | undefined;
+  dragOver: boolean;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onSelect: (type: 'before' | 'after', file: File) => void;
+  onRemove: (type: 'before' | 'after') => void;
+  onDragOver: (e: DragEvent, type: 'before' | 'after') => void;
+  onDragLeave: (e: DragEvent) => void;
+  onDrop: (e: DragEvent, type: 'before' | 'after') => void;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <div
+        onDragOver={e => onDragOver(e, type)}
+        onDragLeave={onDragLeave}
+        onDrop={e => onDrop(e, type)}
+        onClick={() => inputRef.current?.click()}
+        className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors ${
+          dragOver
+            ? 'border-blue-500 bg-blue-50'
+            : photo
+              ? 'border-green-300 bg-green-50'
+              : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
+        }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) onSelect(type, file);
+            e.target.value = '';
+          }}
+        />
+
+        {photo ? (
+          <div className="relative">
+            <img src={photo.preview} alt={label} className="max-h-36 mx-auto rounded-lg object-contain" />
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onRemove(type); }}
+              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 shadow"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="py-4">
+            <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p className="mt-2 text-sm text-gray-500">
+              <span className="text-blue-600 font-medium">Haz clic</span> o arrastra una foto
+            </p>
+            <p className="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WebP — hasta 2MB</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function TreatmentDetail() {
   const { id } = useParams();
   const [treatment, setTreatment] = useState<Treatment | null>(null);
   const [showEvoModal, setShowEvoModal] = useState(false);
-  const [evoForm, setEvoForm] = useState({ observations: '', photoBefore: '', photoAfter: '' });
+  const [evoForm, setEvoForm] = useState({ observations: '' });
+  const [evoPhotos, setEvoPhotos] = useState<{ type: 'before' | 'after'; file: File; preview: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const beforeInputRef = useRef<HTMLInputElement>(null);
+  const afterInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState<'before' | 'after' | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -44,21 +133,84 @@ export default function TreatmentDetail() {
     }
   }, [id]);
 
+  const handlePhotoSelect = (type: 'before' | 'after', file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+      alert('Solo se permiten imágenes JPG, PNG, GIF o WebP');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('La imagen no debe superar los 2MB');
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setEvoPhotos(prev => {
+      const filtered = prev.filter(p => p.type !== type);
+      return [...filtered, { type, file, preview }];
+    });
+  };
+
+  const handleRemovePhoto = (type: 'before' | 'after') => {
+    setEvoPhotos(prev => {
+      const removed = prev.find(p => p.type === type);
+      if (removed) URL.revokeObjectURL(removed.preview);
+      return prev.filter(p => p.type !== type);
+    });
+  };
+
+  const handleDragOver = (e: DragEvent, type: 'before' | 'after') => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(type);
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    setDragOver(null);
+  };
+
+  const handleDrop = (e: DragEvent, type: 'before' | 'after') => {
+    e.preventDefault();
+    setDragOver(null);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) handlePhotoSelect(type, files[0]);
+  };
+
   const handleAddEvolution = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setUploading(true);
+
+      let photoBeforeUrl: string | null = null;
+      let photoAfterUrl: string | null = null;
+
+      // Subir fotos al servidor
+      for (const p of evoPhotos) {
+        const formData = new FormData();
+        formData.append('photo', p.file);
+        const res = await axios.post('/api/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        if (p.type === 'before') photoBeforeUrl = res.data.url;
+        else photoAfterUrl = res.data.url;
+      }
+
       await axios.post('/api/evolutions', {
         treatmentId: id,
         observations: evoForm.observations,
-        photoBefore: evoForm.photoBefore || null,
-        photoAfter: evoForm.photoAfter || null,
+        photoBefore: photoBeforeUrl,
+        photoAfter: photoAfterUrl,
       });
+
       setShowEvoModal(false);
-      setEvoForm({ observations: '', photoBefore: '', photoAfter: '' });
+      setEvoForm({ observations: '' });
+      evoPhotos.forEach(p => URL.revokeObjectURL(p.preview));
+      setEvoPhotos([]);
       const r = await axios.get(`/api/treatments/${id}`);
       setTreatment(r.data);
-    } catch {
-      alert('Error al agregar evolución');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Error al agregar evolución');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -72,6 +224,10 @@ export default function TreatmentDetail() {
       alert('Error al finalizar tratamiento');
     }
   };
+
+  // Encuentra foto para cada tipo
+  const beforePhoto = evoPhotos.find(p => p.type === 'before');
+  const afterPhoto = evoPhotos.find(p => p.type === 'after');
 
   if (!treatment) {
     return (
@@ -184,13 +340,23 @@ export default function TreatmentDetail() {
                   {evo.photoBefore && (
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Antes</p>
-                      <img src={evo.photoBefore} alt="Antes" className="w-32 h-24 object-cover rounded-lg border" />
+                      <img
+                        src={evo.photoBefore.startsWith('http') ? evo.photoBefore : evo.photoBefore}
+                        alt="Antes"
+                        className="w-32 h-24 object-cover rounded-lg border cursor-pointer hover:opacity-90"
+                        onClick={() => window.open(evo.photoBefore!, '_blank')}
+                      />
                     </div>
                   )}
                   {evo.photoAfter && (
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Después</p>
-                      <img src={evo.photoAfter} alt="Después" className="w-32 h-24 object-cover rounded-lg border" />
+                      <img
+                        src={evo.photoAfter.startsWith('http') ? evo.photoAfter : evo.photoAfter}
+                        alt="Después"
+                        className="w-32 h-24 object-cover rounded-lg border cursor-pointer hover:opacity-90"
+                        onClick={() => window.open(evo.photoAfter!, '_blank')}
+                      />
                     </div>
                   )}
                 </div>
@@ -205,8 +371,8 @@ export default function TreatmentDetail() {
 
       {/* Modal Nueva Evolución */}
       {showEvoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8">
+          <div className="bg-white rounded-xl p-6 w-full max-w-xl mx-4">
             <h2 className="text-xl font-bold mb-4">Agregar Evolución</h2>
             <form onSubmit={handleAddEvolution} className="space-y-4">
               <div>
@@ -220,31 +386,62 @@ export default function TreatmentDetail() {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Foto Antes (URL)</label>
-                <input
-                  type="text"
-                  value={evoForm.photoBefore}
-                  onChange={e => setEvoForm({ ...evoForm, photoBefore: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="https://ejemplo.com/foto-antes.jpg"
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <PhotoUploadZone
+                  label="Foto Antes"
+                  type="before"
+                  photo={beforePhoto}
+                  dragOver={dragOver === 'before'}
+                  inputRef={beforeInputRef}
+                  onSelect={handlePhotoSelect}
+                  onRemove={handleRemovePhoto}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                />
+                <PhotoUploadZone
+                  label="Foto Después"
+                  type="after"
+                  photo={afterPhoto}
+                  dragOver={dragOver === 'after'}
+                  inputRef={afterInputRef}
+                  onSelect={handlePhotoSelect}
+                  onRemove={handleRemovePhoto}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Foto Después (URL)</label>
-                <input
-                  type="text"
-                  value={evoForm.photoAfter}
-                  onChange={e => setEvoForm({ ...evoForm, photoAfter: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="https://ejemplo.com/foto-despues.jpg"
-                />
-              </div>
-              <div className="flex space-x-3">
-                <button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
-                  Guardar
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {uploading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Subiendo...
+                    </span>
+                  ) : (
+                    'Guardar Evolución'
+                  )}
                 </button>
-                <button type="button" onClick={() => setShowEvoModal(false)} className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEvoModal(false);
+                    evoPhotos.forEach(p => URL.revokeObjectURL(p.preview));
+                    setEvoPhotos([]);
+                    setEvoForm({ observations: '' });
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg hover:bg-gray-300 font-medium"
+                >
                   Cancelar
                 </button>
               </div>

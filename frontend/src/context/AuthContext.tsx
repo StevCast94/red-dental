@@ -1,18 +1,20 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
 
 interface User {
   id: string;
   name: string;
+  username: string;
   email: string;
   role: string;
+  clinicId?: string | null;
 }
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -27,12 +29,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const binaryStr = atob(base64);
+        const bytes = Uint8Array.from(binaryStr, c => c.charCodeAt(0));
+        const payload = JSON.parse(new TextDecoder('utf-8').decode(bytes));
         setUser({
           id: payload.id,
           name: payload.name,
+          username: payload.username,
           email: payload.email,
           role: payload.role,
+          clinicId: payload.clinicId,
         });
       } catch {
         setToken(null);
@@ -42,13 +50,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, [token]);
 
-  const login = async (email: string, password: string) => {
-    const res = await axios.post('/api/auth/login', { email, password });
+  const login = async (username: string, password: string) => {
+    const res = await axios.post('/api/auth/login', { username, password });
     const { token: newToken, user: userData } = res.data;
     localStorage.setItem('token', newToken);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     setToken(newToken);
     setUser(userData);
+    // Si es SUPER_ADMIN, redirigir a /admin
+    if (userData.role === 'SUPER_ADMIN') {
+      window.location.href = '/admin';
+    } else {
+      window.location.href = '/dashboard';
+    }
   };
 
   const logout = () => {

@@ -1,13 +1,15 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { clinicFilter } from '../utils/clinicFilter';
 
 const prisma = new PrismaClient();
 
 export const getToothRecords = async (req: AuthRequest, res: Response) => {
   try {
+    const cf: any = clinicFilter(req.user);
     const records = await prisma.toothRecord.findMany({
-      where: { patientId: req.params.patientId },
+      where: { patientId: req.params.patientId, patient: cf },
       orderBy: [{ number: 'asc' }, { face: 'asc' }],
     });
     res.json(records);

@@ -14,8 +14,12 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   }
 
   try {
-    const decoded = verifyToken(token);
-    req.user = decoded;
+    const decoded: any = verifyToken(token);
+    if (typeof decoded === 'object' && decoded !== null) {
+      req.user = decoded;
+    } else {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
     next();
   } catch (error) {
     res.status(401).json({ error: 'Token inválido o expirado.' });
@@ -24,7 +28,7 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
 
 export const authorize = (roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!roles.includes(req.user?.role)) {
+    if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ error: 'No tienes permisos para realizar esta acción.' });
     }
     next();

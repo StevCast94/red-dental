@@ -21,6 +21,7 @@ function toCsv(headers: string[], rows: string[][]): string {
 export const exportPatients = async (req: Request, res: Response) => {
   try {
     const patients = await prisma.patient.findMany({
+      where: { deletedAt: null },
       include: {
         orthodontist: { select: { name: true } },
         treatments: { select: { type: true, active: true } },

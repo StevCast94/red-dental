@@ -43,6 +43,12 @@ const treatmentLabels: Record<string, string> = {
   INVISIBLE_ALIGNERS: 'Alineadores Invisibles',
   LINGUAL_ORTHODONTICS: 'Ortodoncia Lingual',
   INTERCEPTIVE_ORTHODONTICS: 'Ortodoncia Interceptiva',
+  EXODONCIA: 'Exodoncia',
+  ENDODONCIA: 'Endodoncia',
+  PROTESIS_REMOVIBLE: 'Prótesis Removible',
+  PROTESIS_FIJA: 'Prótesis Fija',
+  RADIOGRAFIA: 'Radiografía',
+  OPERATORIO: 'Operatorio',
 };
 
 const statusBadge: Record<string, string> = {
