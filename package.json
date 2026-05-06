@@ -1,9 +1,12 @@
 {
-  "name": "red-dental",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "build": "cd backend && npm install && npm run build",
-    "start": "node start.js"
-  }
+    "name":  "red-dental",
+    "version":  "1.0.0",
+    "private":  true,
+    "scripts":  {
+                    "build":  "cd backend \u0026\u0026 npm install \u0026\u0026 npm run build",
+                    "start":  "node start.js"
+                },
+    "engines":  {
+                    "node":  "\u003e=20.0.0"
+                }
 }
