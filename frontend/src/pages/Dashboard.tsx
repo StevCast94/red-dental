@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
+
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler);
 
 // ─── Interfaces ───────────────────────────────────────────────────────

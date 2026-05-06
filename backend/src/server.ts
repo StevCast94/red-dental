@@ -1,7 +1,11 @@
-import express, { Application } from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { PrismaClient } from '@prisma/client';
 
 import healthRoutes from './routes/healthRoutes';
@@ -27,10 +31,40 @@ const app: Application = express();
 const PORT = process.env.PORT || 5000;
 export const prisma = new PrismaClient();
 
+// ─── Seguridad ───────────────────────────────────────────────
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(express.json());
 
-// Routes
+// ─── Rate Limiting global ────────────────────────────────────
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 300, // límite por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en 15 minutos.' },
+});
+app.use(limiter);
+
+// Rate limit más estricto para login
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo en 15 minutos.' },
+});
+app.use('/api/auth', authLimiter);
+
+// ─── Logging ─────────────────────────────────────────────────
+app.use(morgan('short'));
+
+// ─── Parsing ─────────────────────────────────────────────────
+app.use(express.json({ limit: '10mb' }));
+
+// ─── Servir archivos subidos ─────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// ─── Rutas API ───────────────────────────────────────────────
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
@@ -48,13 +82,8 @@ app.use('/api/reminders', reminderRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/reports', reportsRoutes);
 
-// Forzar charset UTF-8 en todas las respuestas
-// Servir archivos subidos
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-// Servir frontend estático (build de producción si existe)
+// ─── Frontend estático ───────────────────────────────────────
 const frontendBuildPath = path.join(__dirname, '../../frontend/dist');
-const fs = require('fs');
 if (fs.existsSync(frontendBuildPath)) {
   app.use(express.static(frontendBuildPath));
   app.get('*', (req, res) => {
@@ -67,6 +96,31 @@ if (fs.existsSync(frontendBuildPath)) {
   console.log('⚠️ No hay build de frontend. Usa: cd frontend && npm run build');
 }
 
-app.listen(PORT, () => {
+// ─── Error handler global ────────────────────────────────────
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('❌ Error no controlado:', err.message);
+  console.error(err.stack);
+  res.status(500).json({ error: 'Error interno del servidor.' });
+});
+
+// ─── Graceful shutdown ───────────────────────────────────────
+const server = app.listen(PORT, () => {
   console.log(`🚀 Servidor en http://localhost:${PORT}`);
 });
+
+function gracefulShutdown(signal: string) {
+  console.log(`\n🛑 Recibida señal ${signal}. Cerrando conexiones...`);
+  server.close(async () => {
+    await prisma.$disconnect();
+    console.log('👋 Conexiones cerradas. Hasta luego!');
+    process.exit(0);
+  });
+  // Forzar cierre después de 10s
+  setTimeout(() => {
+    console.error('💥 Forzando cierre después de timeout.');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
