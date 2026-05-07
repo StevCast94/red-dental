@@ -31,6 +31,9 @@ const app: Application = express();
 const PORT = process.env.PORT || 5000;
 export const prisma = new PrismaClient();
 
+// ─── Trust proxy para rate limiter detrás de Railway ──────
+app.set('trust proxy', 1);
+
 // ─── Seguridad ───────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
