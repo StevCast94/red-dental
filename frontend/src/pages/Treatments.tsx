@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
 
 interface Patient {
   id: string;
@@ -35,6 +36,7 @@ const treatmentLabels: Record<string, string> = {
 };
 
 export default function Treatments() {
+  const { user } = useAuth();
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -42,6 +44,16 @@ export default function Treatments() {
   const [form, setForm] = useState({ patientId: '', type: 'METAL_BRACES', estimatedMonths: 12, phases: '' });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  const handleDeleteTreatment = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este tratamiento? Se eliminarán todas las evoluciones, pagos y usos de inventario asociados.')) return;
+    try {
+      await axios.delete(`/api/treatments/${id}`);
+      loadTreatments();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Error al eliminar tratamiento');
+    }
+  };
 
   useEffect(() => {
     loadTreatments();
@@ -105,40 +117,104 @@ export default function Treatments() {
         </button>
       </div>
 
-      {/* Grid de tratamientos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {treatments.map(t => (
-          <Link
-            key={t.id}
-            to={`/treatments/${t.id}`}
-            className="bg-white rounded-xl shadow hover:shadow-lg transition p-6 border border-gray-100"
-          >
-            <div className="flex justify-between items-start mb-3">
-              <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full">
-                {treatmentLabels[t.type] || t.type}
-              </span>
-              {t.active && (
-                <span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">
-                  Activo
-                </span>
+      {/* Active treatments: Grid */}
+      {activeTab === 'active' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {treatments.map(t => (
+            <div key={t.id} className="bg-white rounded-xl shadow hover:shadow-lg transition p-6 border border-gray-100 relative">
+              <Link to={`/treatments/${t.id}`} className="block">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full">
+                    {treatmentLabels[t.type] || t.type}
+                  </span>
+                  {t.active && (
+                    <span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">
+                      Activo
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  {t.patient.firstName} {t.patient.lastName}
+                </h3>
+                <div className="text-sm text-gray-500 space-y-1">
+                  <p>Inicio: {new Date(t.startDate).toLocaleDateString()}</p>
+                  <p>Duración: {t.estimatedMonths} meses</p>
+                  <p>Evoluciones: {t._count.evolutions}</p>
+                </div>
+              </Link>
+            </div>
+          ))}
+          {treatments.length === 0 && (
+            <div className="col-span-full text-center py-12 text-gray-500">
+              No hay tratamientos activos
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Completed treatments: Table/List */}
+      {activeTab === 'completed' && (
+        <div className="bg-white rounded-xl shadow overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="text-left px-4 py-3">Tipo</th>
+                <th className="text-left px-4 py-3">Paciente</th>
+                <th className="text-left px-4 py-3">Inicio</th>
+                <th className="text-left px-4 py-3">Fin</th>
+                <th className="text-center px-4 py-3">Duración</th>
+                <th className="text-center px-4 py-3">Evoluciones</th>
+                {user?.role === 'ADMIN' && <th className="text-center px-4 py-3">Acción</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {treatments.map(t => (
+                <tr key={t.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <Link to={`/treatments/${t.id}`} className="text-blue-600 hover:underline font-medium">
+                      {treatmentLabels[t.type] || t.type}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-gray-800">
+                    {t.patient.firstName} {t.patient.lastName}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {new Date(t.startDate).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+                    —
+                  </td>
+                  <td className="px-4 py-3 text-center text-gray-600">
+                    {t.estimatedMonths} meses
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full">
+                      {t._count.evolutions}
+                    </span>
+                  </td>
+                  {user?.role === 'ADMIN' && (
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => handleDeleteTreatment(t.id)}
+                        className="bg-red-100 text-red-600 hover:bg-red-200 text-xs font-medium px-3 py-1.5 rounded-lg transition"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {treatments.length === 0 && (
+                <tr>
+                  <td colSpan={user?.role === 'ADMIN' ? 7 : 6} className="text-center py-12 text-gray-500">
+                    No hay tratamientos completados
+                  </td>
+                </tr>
               )}
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">
-              {t.patient.firstName} {t.patient.lastName}
-            </h3>
-            <div className="text-sm text-gray-500 space-y-1">
-              <p>Inicio: {new Date(t.startDate).toLocaleDateString()}</p>
-              <p>Duración: {t.estimatedMonths} meses</p>
-              <p>Evoluciones: {t._count.evolutions}</p>
-            </div>
-          </Link>
-        ))}
-        {treatments.length === 0 && (
-          <div className="col-span-full text-center py-12 text-gray-500">
-            No hay tratamientos {activeTab === 'active' ? 'activos' : 'completados'}
-          </div>
-        )}
-      </div>
+            </tbody>
+          </table>
+        </div>
+      )}
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-2 px-4 py-3 border-t border-gray-200 mt-6 bg-white rounded-xl shadow">
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}

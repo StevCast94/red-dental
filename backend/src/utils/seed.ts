@@ -4,11 +4,7 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 const CLINICS = [
-  { name: 'Dientes Sanos', slug: 'dientes-sanos' },
-  { name: 'Sonrisa Perfecta', slug: 'sonrisa-perfecta' },
-  { name: 'Clínica Dental Centro', slug: 'centro' },
-  { name: 'Odontología Norte', slug: 'norte' },
-  { name: 'Dental Sur', slug: 'sur' },
+  { name: 'REDH Dental', slug: 'redh-dental' },
 ];
 
 async function main() {
@@ -40,6 +36,7 @@ async function main() {
     },
   });
   console.log(`👑 Super Admin: stevens / admin123`);
+  console.log(`🏥 REDH Dental Admin: dra.rita / admin123`);
 
   // 2. Crear clínicas con sus usuarios
   let clinicIndex = 0;
@@ -70,9 +67,9 @@ async function main() {
     // Usuarios de esta clínica
     const admin = await prisma.user.create({
       data: {
-        name: `Admin ${clinicData.name}`,
-        username: `admin.${slug}`,
-        email: `admin@${slug}.com`,
+        name: `Dra. Rita`,
+        username: `dra.rita`,
+        email: `drita@redhdental.com`,
         password,
         role: 'ADMIN',
         clinicId: clinic.id,
@@ -81,9 +78,9 @@ async function main() {
 
     const orthodontist = await prisma.user.create({
       data: {
-        name: `Dra. Rita (${clinicData.name})`,
-        username: `drarita.${slug}`,
-        email: `drarita@${slug}.com`,
+        name: `Dr. Carlos Mendoza`,
+        username: `dr.carlos`,
+        email: `cmendoza@redhdental.com`,
         password,
         role: 'ORTHODONTIST',
         clinicId: clinic.id,
@@ -92,9 +89,9 @@ async function main() {
 
     await prisma.user.create({
       data: {
-        name: `Recepcionista ${clinicData.name}`,
-        username: `recepcion.${slug}`,
-        email: `recepcion@${slug}.com`,
+        name: `María González`,
+        username: `maria.recepcion`,
+        email: `mgonzalez@redhdental.com`,
         password,
         role: 'RECEPTIONIST',
         clinicId: clinic.id,
@@ -105,11 +102,11 @@ async function main() {
     const patient1 = await prisma.patient.create({
       data: {
         firstName: 'Juan',
-        lastName: `Pérez (${clinicData.name})`,
+        lastName: 'Pérez',
         birthDate: new Date('1990-05-15'),
         phone: '0991234567',
-        email: `juan@${slug}.com`,
-        address: `Av. Principal 123, ${clinicData.name}`,
+        email: 'juan@email.com',
+        address: 'Av. Principal 123',
         clinicId: clinic.id,
         orthodontistId: orthodontist.id,
       },
@@ -118,11 +115,11 @@ async function main() {
     const patient2 = await prisma.patient.create({
       data: {
         firstName: 'Ana',
-        lastName: `López (${clinicData.name})`,
+        lastName: 'López',
         birthDate: new Date('2000-08-22'),
         phone: '0997654321',
-        email: `ana@${slug}.com`,
-        address: `Calle Secundaria 456, ${clinicData.name}`,
+        email: 'ana@email.com',
+        address: 'Calle Secundaria 456',
         clinicId: clinic.id,
         orthodontistId: orthodontist.id,
       },
@@ -173,34 +170,31 @@ async function main() {
     });
 
     // Login logs de ejemplo para esta clínica
-    const hoursAgo = (CLINICS.length - clinicIndex) * 2;
-    const logDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
     await prisma.loginLog.create({
       data: {
-        username: `admin.${slug}`,
+        username: 'dra.rita',
         clinicId: clinic.id,
         success: true,
-        ip: '192.168.1.' + (100 + clinicIndex),
-        createdAt: logDate,
+        ip: '192.168.1.100',
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
       },
     });
-    const failDate = new Date(Date.now() - (hoursAgo + 1) * 60 * 60 * 1000);
     await prisma.loginLog.create({
       data: {
-        username: `admin.${slug}`,
+        username: 'dra.rita',
         clinicId: clinic.id,
         success: false,
-        ip: '192.168.1.' + (100 + clinicIndex),
-        createdAt: failDate,
+        ip: '192.168.1.100',
+        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
       },
     });
 
     console.log(`🏥 ${clinicData.name}: ${clinic.name}`);
-    console.log(`   admin.${slug} (Admin)`);
-    console.log(`   drarita.${slug} (Ortodoncista)`);
-    console.log(`   recepcion.${slug} (Recepcionista)`);
+    console.log(`   dra.rita (Admin)`);
+    console.log(`   dr.carlos (Ortodoncista)`);
+    console.log(`   maria.recepcion (Recepcionista)`);
     clinicIndex++;
-  }
+  } // end for
 
   // Login log del super admin
   await prisma.loginLog.create({

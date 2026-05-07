@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTreatments, getTreatmentById, createTreatment, updateTreatment, completeTreatment } from '../controllers/treatmentController';
+import { getTreatments, getTreatmentById, createTreatment, updateTreatment, completeTreatment, deleteTreatment } from '../controllers/treatmentController';
 import { authenticate, authorize } from '../middlewares/authMiddleware';
 
 const router = Router();
@@ -8,5 +8,6 @@ router.get('/:id', authenticate, getTreatmentById);
 router.post('/', authenticate, authorize(['ADMIN', 'ORTHODONTIST']), createTreatment);
 router.put('/:id', authenticate, authorize(['ADMIN', 'ORTHODONTIST']), updateTreatment);
 router.patch('/:id/complete', authenticate, authorize(['ADMIN', 'ORTHODONTIST']), completeTreatment);
+router.delete('/:id', authenticate, authorize(['ADMIN']), deleteTreatment);
 
 export default router;

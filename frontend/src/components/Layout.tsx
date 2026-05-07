@@ -25,25 +25,25 @@ export default function Layout({ children }: { children: ReactNode }) {
                 </Link>
               </div>
               <div className="ml-6 flex space-x-4">
-                <Link to="/appointments" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
-                  Citas
+                <Link to="/patients" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
+                  Pacientes
                 </Link>
                 <Link to="/treatments" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
                   Tratamientos
                 </Link>
                 {!isExternal && (
                   <>
-                    <Link to="/dashboard" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
-                      Dashboard
+                    <Link to="/appointments" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
+                      Citas
                     </Link>
                     <Link to="/payments" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
                       Pagos
                     </Link>
+                    <Link to="/dashboard" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
+                      Dashboard
+                    </Link>
                   </>
                 )}
-                <Link to="/patients" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600">
-                  Pacientes
-                </Link>
                 {/* Admin link removed — clinics manage users themselves */}
               </div>
             </div>

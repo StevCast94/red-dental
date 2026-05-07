@@ -55,7 +55,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
     const patientFilter = Object.keys(cf).length > 0 ? { clinicId: cf.clinicId } : {};
     const treatmentCf = { patient: patientFilter };
     const treatmentActiveCf = { patient: patientFilter, active: true };
-    const appointmentCf = { patient: patientFilter };
+    const appointmentCf = { patient: patientFilter, deletedAt: null };
     const paymentCf = { patient: patientFilter };
 
     const [

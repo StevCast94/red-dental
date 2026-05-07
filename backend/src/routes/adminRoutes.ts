@@ -16,6 +16,10 @@ import {
   createPayment,
   updatePaymentStatus,
   getLoginLogs,
+  impersonateClinic,
+  exportClinicBackup,
+  restoreClinicBackup,
+  exportAllBackup,
 } from '../controllers/adminController';
 
 const router = Router();
@@ -44,5 +48,13 @@ router.put('/payments/:id/status', authenticate, requireRole('SUPER_ADMIN'), upd
 
 // Logs
 router.get('/login-logs', authenticate, requireRole('SUPER_ADMIN'), getLoginLogs);
+
+// Impersonate
+router.post('/impersonate/:clinicId', authenticate, requireRole('SUPER_ADMIN'), impersonateClinic);
+
+// Backup / Restore
+router.get('/clinics/:id/backup', authenticate, requireRole('SUPER_ADMIN'), exportClinicBackup);
+router.post('/clinics/:id/restore', authenticate, requireRole('SUPER_ADMIN'), restoreClinicBackup);
+router.get('/backup-all', authenticate, requireRole('SUPER_ADMIN'), exportAllBackup);
 
 export default router;

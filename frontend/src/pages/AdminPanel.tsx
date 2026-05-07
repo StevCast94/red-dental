@@ -123,18 +123,37 @@ export default function AdminPanel() {
                       {c.subscription ? `$${c.subscription.amount.toFixed(2)}` : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-center">
-                      <button
-                        onClick={() => {
-                          if (!confirm('¿Eliminar toda la clínica? Esta acción no se puede deshacer. Se borrarán todos los pacientes, citas, tratamientos, pagos y usuarios.')) return;
-                          axios.delete(`/api/admin/clinics/${c.id}`)
-                            .then(() => loadDashboard())
-                            .catch(err => alert(err.response?.data?.error || 'Error al eliminar'))
-                        }}
-                        className="text-red-500 hover:text-red-700 text-lg"
-                        title="Eliminar clínica"
-                      >
-                        🗑️
-                      </button>
+                      <div className="flex gap-1 justify-center">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await axios.post(`/api/admin/impersonate/${c.id}`);
+                              const { token } = res.data;
+                              localStorage.setItem('token', token);
+                              axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                              window.location.href = '/dashboard';
+                            } catch (err: any) {
+                              alert(err.response?.data?.error || 'Error al entrar a la clínica');
+                            }
+                          }}
+                          className="text-amber-500 hover:text-amber-700 text-xs font-medium"
+                          title="Entrar a la clínica como ADMIN"
+                        >
+                          🔑
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!confirm('¿Eliminar toda la clínica? Esta acción no se puede deshacer. Se borrarán todos los pacientes, citas, tratamientos, pagos y usuarios.')) return;
+                            axios.delete(`/api/admin/clinics/${c.id}`)
+                              .then(() => window.location.reload())
+                              .catch(err => alert(err.response?.data?.error || 'Error al eliminar'))
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                          title="Eliminar clínica"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -121,3 +121,33 @@ export const completeTreatment = async (req: AuthRequest, res: Response) => {
     res.status(400).json({ error: 'Error al finalizar tratamiento' });
   }
 };
+
+export const deleteTreatment = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const cf: any = clinicFilter(req.user);
+    // Verify treatment exists and belongs to user's clinic
+    const treatment = await prisma.treatment.findFirst({
+      where: { id, patient: cf },
+      include: { patient: { select: { clinicId: true } } },
+    });
+    if (!treatment) return res.status(404).json({ error: 'Tratamiento no encontrado' });
+    
+    await prisma.$transaction(async (tx) => {
+      // Delete evolutions
+      await tx.evolution.deleteMany({ where: { treatmentId: id } });
+      // Delete payments
+      await tx.payment.deleteMany({ where: { treatmentId: id } });
+      // Delete inventory usage
+      await tx.inventoryUsage.deleteMany({ where: { treatmentId: id } });
+      // Delete the treatment
+      await tx.treatment.delete({ where: { id } });
+    });
+
+    console.log(`[AUDIT] User ${req.user?.id} deleted treatment ${id}`);
+    res.json({ success: true, message: 'Tratamiento eliminado correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al eliminar tratamiento' });
+  }
+};

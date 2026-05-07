@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import bcrypt from 'bcryptjs';
+import { generateToken } from '../utils/jwt';
 
 const prisma = new PrismaClient();
 
@@ -400,6 +401,288 @@ export const getLoginLogs = async (req: AuthRequest, res: Response) => {
     });
     res.json(logs);
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// POST /api/admin/impersonate/:clinicId — Super Admin impersona una clínica
+export const impersonateClinic = async (req: AuthRequest, res: Response) => {
+  try {
+    const { clinicId } = req.params;
+
+    // Verify clinic exists
+    const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+    if (!clinic) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    // Find first active ADMIN user in this clinic
+    const adminUser = await prisma.user.findFirst({
+      where: { clinicId, role: 'ADMIN', active: true },
+      select: { id: true, name: true, email: true, username: true, role: true, clinicId: true },
+    });
+
+    if (!adminUser) {
+      return res.status(400).json({ error: 'No hay un usuario ADMIN activo en esta clínica' });
+    }
+
+    // Generate temporary JWT with impersonating flag
+    const token = generateToken({
+      id: adminUser.id,
+      name: adminUser.name,
+      email: adminUser.email,
+      username: adminUser.username,
+      role: adminUser.role,
+      clinicId: adminUser.clinicId,
+      impersonating: true,
+      impersonatedBy: req.user?.id,
+    });
+
+    console.log(`[AUDIT] Super Admin ${req.user?.id} impersonating clinic ${clinicId} as user ${adminUser.id}`);
+
+    res.json({ token, user: adminUser });
+  } catch (error: any) {
+    console.error('Impersonate error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// GET /api/admin/clinics/:id/backup — Exportar datos completos de una clínica
+export const exportClinicBackup = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: clinicId } = req.params;
+
+    // Verify clinic exists
+    const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+    if (!clinic) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    // Get all related data
+    const patients = await prisma.patient.findMany({ where: { clinicId, deletedAt: null } });
+    const patientIds = patients.map(p => p.id);
+
+    const treatments = patientIds.length > 0
+      ? await prisma.treatment.findMany({ where: { patientId: { in: patientIds } }, include: { evolutions: true, payments: true, inventoryUsage: true } })
+      : [];
+
+    const appointments = patientIds.length > 0
+      ? await prisma.appointment.findMany({ where: { patientId: { in: patientIds }, deletedAt: null } })
+      : [];
+
+    const toothRecords = patientIds.length > 0
+      ? await prisma.toothRecord.findMany({ where: { patientId: { in: patientIds } } })
+      : [];
+
+    const users = await prisma.user.findMany({ where: { clinicId }, select: { id: true, name: true, email: true, username: true, role: true, active: true } });
+    const subscription = await prisma.clinicSubscription.findUnique({ where: { clinicId } });
+
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      clinic: {
+        id: clinic.id,
+        name: clinic.name,
+        slug: clinic.slug,
+        address: clinic.address,
+        phone: clinic.phone,
+        contactEmail: clinic.contactEmail,
+        active: clinic.active,
+      },
+      users,
+      subscription,
+      patients,
+      treatments,
+      appointments,
+      toothRecords,
+    };
+
+    const filename = `backup-${clinic.slug}-${new Date().toISOString().split('T')[0]}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(backup);
+  } catch (error: any) {
+    console.error('Export clinic backup error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// POST /api/admin/clinics/:id/restore — Restaurar datos de una clínica
+export const restoreClinicBackup = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: clinicId } = req.params;
+    const backup = req.body;
+
+    if (!backup || !backup.patients) {
+      return res.status(400).json({ error: 'Formato de backup inválido' });
+    }
+
+    // Verify clinic exists
+    const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+    if (!clinic) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    let restoredPatients = 0;
+    let restoredTreatments = 0;
+    let restoredEvolutions = 0;
+    let restoredPayments = 0;
+    let restoredAppointments = 0;
+    let restoredToothRecords = 0;
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Restore patients (skip existing by checking unique identifiers)
+      for (const patient of backup.patients) {
+        const existing = await tx.patient.findFirst({
+          where: { clinicId, firstName: patient.firstName, lastName: patient.lastName, birthDate: patient.birthDate },
+        });
+        if (existing) continue;
+
+        const { id: _id, clinicId: _cid, createdAt: _cr, updatedAt: _up, deletedAt: _dl, ...patientData } = patient;
+        await tx.patient.create({
+          data: { ...patientData, clinicId },
+        });
+        restoredPatients++;
+      }
+
+      // 2. Restore treatments and their relations
+      if (backup.treatments) {
+        for (const treatment of backup.treatments) {
+          const { evolutions, payments, inventoryUsage, id: _tid, createdAt: _tc, updatedAt: _tu, ...treatmentData } = treatment;
+
+          // Find matching patient in this clinic
+          const matchingPatient = await tx.patient.findFirst({
+            where: { clinicId, firstName: treatmentData.patient?.firstName || '', lastName: treatmentData.patient?.lastName || '' },
+          });
+          if (!matchingPatient) continue;
+
+          const newTreatment = await tx.treatment.create({
+            data: { ...treatmentData, patientId: matchingPatient.id },
+          });
+          restoredTreatments++;
+
+          // Restore evolutions
+          if (evolutions && evolutions.length > 0) {
+            for (const evo of evolutions) {
+              const { id: _eid, treatmentId: _et, appointmentId: _ea, ...evoData } = evo;
+              await tx.evolution.create({ data: { ...evoData, treatmentId: newTreatment.id } });
+              restoredEvolutions++;
+            }
+          }
+
+          // Restore payments
+          if (payments && payments.length > 0) {
+            for (const pay of payments) {
+              const { id: _pid, treatmentId: _pt, patientId: _pp, appointmentId: _pa, ...payData } = pay;
+              await tx.payment.create({ data: { ...payData, treatmentId: newTreatment.id, patientId: matchingPatient.id } });
+              restoredPayments++;
+            }
+          }
+
+          // Restore inventoryUsage
+          if (inventoryUsage && inventoryUsage.length > 0) {
+            for (const usage of inventoryUsage) {
+              const { id: _uid, treatmentId: _ut, itemId: _ui, ...usageData } = usage;
+              await tx.inventoryUsage.create({ data: { ...usageData, treatmentId: newTreatment.id } });
+            }
+          }
+        }
+      }
+
+      // 3. Restore appointments
+      if (backup.appointments) {
+        for (const apt of backup.appointments) {
+          const { id: _aid, patientId: _ap, orthodontistId: _ao, ...aptData } = apt;
+          const matchingPatient = await tx.patient.findFirst({
+            where: { clinicId, firstName: aptData.patient?.firstName || '', lastName: aptData.patient?.lastName || '' },
+          });
+          if (!matchingPatient) continue;
+          await tx.appointment.create({ data: { ...aptData, patientId: matchingPatient.id } });
+          restoredAppointments++;
+        }
+      }
+
+      // 4. Restore tooth records
+      if (backup.toothRecords) {
+        for (const tr of backup.toothRecords) {
+          const { id: _trid, patientId: _tp, updatedAt: _tu, ...trData } = tr;
+          const matchingPatient = await tx.patient.findFirst({
+            where: { clinicId, firstName: trData.patient?.firstName || '', lastName: trData.patient?.lastName || '' },
+          });
+          if (!matchingPatient) continue;
+          await tx.toothRecord.create({ data: { ...trData, patientId: matchingPatient.id } });
+          restoredToothRecords++;
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Restauración completada',
+      stats: {
+        patients: restoredPatients,
+        treatments: restoredTreatments,
+        evolutions: restoredEvolutions,
+        payments: restoredPayments,
+        appointments: restoredAppointments,
+        toothRecords: restoredToothRecords,
+      },
+    });
+  } catch (error: any) {
+    console.error('Restore clinic backup error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// GET /api/admin/backup-all — Exportar todas las clínicas completas
+export const exportAllBackup = async (req: AuthRequest, res: Response) => {
+  try {
+    const clinics = await prisma.clinic.findMany({ orderBy: { name: 'asc' } });
+    const backups: any[] = [];
+
+    for (const clinic of clinics) {
+      const patients = await prisma.patient.findMany({ where: { clinicId: clinic.id, deletedAt: null } });
+      const patientIds = patients.map(p => p.id);
+
+      const treatments = patientIds.length > 0
+        ? await prisma.treatment.findMany({ where: { patientId: { in: patientIds } }, include: { evolutions: true, payments: true, inventoryUsage: true } })
+        : [];
+
+      const appointments = patientIds.length > 0
+        ? await prisma.appointment.findMany({ where: { patientId: { in: patientIds }, deletedAt: null } })
+        : [];
+
+      const toothRecords = patientIds.length > 0
+        ? await prisma.toothRecord.findMany({ where: { patientId: { in: patientIds } } })
+        : [];
+
+      const users = await prisma.user.findMany({ where: { clinicId: clinic.id }, select: { id: true, name: true, email: true, username: true, role: true, active: true } });
+      const subscription = await prisma.clinicSubscription.findUnique({ where: { clinicId: clinic.id } });
+
+      backups.push({
+        clinic: {
+          id: clinic.id,
+          name: clinic.name,
+          slug: clinic.slug,
+          address: clinic.address,
+          phone: clinic.phone,
+          contactEmail: clinic.contactEmail,
+          active: clinic.active,
+        },
+        users,
+        subscription,
+        patients,
+        treatments,
+        appointments,
+        toothRecords,
+      });
+    }
+
+    const result = {
+      exportedAt: new Date().toISOString(),
+      totalClinics: clinics.length,
+      clinics: backups,
+    };
+
+    const filename = `backup-all-${new Date().toISOString().split('T')[0]}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(result);
+  } catch (error: any) {
+    console.error('Export all backup error:', error);
     res.status(500).json({ error: error.message });
   }
 };

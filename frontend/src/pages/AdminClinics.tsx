@@ -43,6 +43,18 @@ export default function AdminClinics() {
       alert(err.response?.data?.error || 'Error al eliminar clínica');
     }
   };
+
+  const handleImpersonate = async (clinicId: string) => {
+    try {
+      const res = await axios.post(`/api/admin/impersonate/${clinicId}`);
+      const { token } = res.data;
+      localStorage.setItem('token', token);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      window.location.href = '/dashboard';
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Error al entrar a la clínica');
+    }
+  };
   const [editingSub, setEditingSub] = useState<string | null>(null);
   const [subForm, setSubForm] = useState({ plan: 'MONTHLY', amount: 30, nextBilling: '', active: true });
   const [confirmToggle, setConfirmToggle] = useState<string | null>(null);
@@ -134,12 +146,27 @@ export default function AdminClinics() {
             <h1 className="text-2xl font-bold text-gray-800">🏥 Clínicas</h1>
             <p className="text-sm text-gray-500">Gestión de clínicas — activar/inactivar, editar datos y suscripciones</p>
           </div>
-          <button
-            onClick={() => setShowNewClinic(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-1.5"
-          >
-            <span>+</span> Nueva Clínica
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const a = document.createElement('a');
+                a.href = '/api/admin/backup-all';
+                a.setAttribute('download', '');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              }}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-1.5"
+            >
+              📦 Backup Global
+            </button>
+            <button
+              onClick={() => setShowNewClinic(true)}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-1.5"
+            >
+              <span>+</span> Nueva Clínica
+            </button>
+          </div>
         </div>
       </div>
 
@@ -239,6 +266,27 @@ export default function AdminClinics() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => handleImpersonate(c.id)}
+                      className="text-amber-600 hover:text-amber-800 text-xs font-medium"
+                      title="Entrar a la clínica como ADMIN"
+                    >
+                      🔑 Entrar
+                    </button>
+                    <button
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = `/api/admin/clinics/${c.id}/backup`;
+                        a.setAttribute('download', '');
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }}
+                      className="text-gray-500 hover:text-gray-700 text-xs font-medium"
+                      title="Descargar backup de esta clínica"
+                    >
+                      💾 Backup
+                    </button>
                     <button
                       onClick={() => openClinicEdit(c)}
                       className="text-gray-500 hover:text-gray-700 text-xs font-medium"
