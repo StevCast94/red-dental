@@ -5,8 +5,10 @@ const prisma = new PrismaClient();
 async function main() {
   const password = await bcrypt.hash('admin123', 10);
   
-  const user = await prisma.user.create({
-    data: {
+  const user = await prisma.user.upsert({
+    where: { username: 'stevens' },
+    update: { password, role: 'SUPER_ADMIN' },
+    create: {
       name: 'Stevens (Super Admin)',
       username: 'stevens',
       email: 'stevens@reddental.com',
@@ -16,7 +18,7 @@ async function main() {
     },
   });
   
-  console.log('Super Admin creado:', user.username, '/ admin123');
+  console.log('✅ Super Admin listo:', user.username, '/ admin123');
 }
 
 main().catch(e => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
