@@ -9,18 +9,20 @@ function DateSelector({ selectedDate, onSelect }: {
   const [startOffset, setStartOffset] = useState(0);
   const [countMap, setCountMap] = useState<Record<string, number>>({});
 
-  // Generar 14 días desde startOffset
-  const today = new Date();
+  // Generar 12 días desde startOffset (usando fecha local, no UTC)
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayLocal = new Date(todayStr + 'T12:00:00');
   const days = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() + startOffset + i);
+    const d = new Date(todayLocal);
+    d.setDate(todayLocal.getDate() + startOffset + i);
     return d;
   });
 
   // Cargar conteo de citas para el rango visible
   useEffect(() => {
-    const from = days[0].toISOString().split('T')[0];
-    const to = days[days.length - 1].toISOString().split('T')[0];
+    const fmt = (d: Date) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const from = fmt(days[0]);
+    const to = fmt(days[days.length - 1]);
     axios.get(`/api/appointments/count?from=${from}&to=${to}`)
       .then((res) => setCountMap(res.data))
       .catch(() => {});
@@ -67,7 +69,8 @@ function DateSelector({ selectedDate, onSelect }: {
       {/* Day cards - visible sin scrollbar */}
       <div className="flex gap-2 overflow-hidden justify-center">
         {days.map((d) => {
-          const dateStr = d.toISOString().split('T')[0];
+          const fmt = (dd: Date) => dd.getFullYear() + '-' + String(dd.getMonth()+1).padStart(2,'0') + '-' + String(dd.getDate()).padStart(2,'0');
+          const dateStr = fmt(d);
           const isSelected = dateStr === selectedDate;
           const dayName = d.toLocaleDateString('es-EC', { weekday: 'short' }).replace('.', '');
           const dayNum = d.getDate();
@@ -105,12 +108,8 @@ function DateSelector({ selectedDate, onSelect }: {
 }
 
 function getWhatsAppLink(phone: string, patientName: string, date: string, type: string) {
+  // El teléfono ya viene con código de país desde la DB (ej: 593999999999)
   const cleaned = phone.replace(/[^\d]/g, '');
-  // Si no tiene código de país y empieza con 09, asumimos Ecuador (+593)
-  const fullPhone = cleaned.startsWith('593') ? cleaned :
-    cleaned.startsWith('09') ? '593' + cleaned.slice(1) :
-    cleaned.startsWith('9') ? '593' + cleaned :
-    '593' + cleaned;
 
   const formattedDate = new Date(date).toLocaleDateString('es-EC', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
@@ -131,7 +130,7 @@ function getWhatsAppLink(phone: string, patientName: string, date: string, type:
 
   const message = `Hola ${patientName}, te recordamos que tienes una cita de ${typeLabel[type] || type} el dia ${formattedDate} a las ${formattedTime}.`;
 
-  return `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`;
 }
 
 interface Patient {
@@ -286,7 +285,7 @@ export default function Appointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [orthodontists, setOrthodontists] = useState<Orthodontist[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [showModal, setShowModal] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [form, setForm] = useState({
@@ -338,7 +337,9 @@ export default function Appointments() {
 
   const openCreateModal = () => {
     setEditingAppointment(null);
-    setForm({ patientId: '', date: selectedDate + 'T08:00', duration: 30, type: 'INITIAL_CONSULTATION', orthodontistId: '' });
+    // Precargar exactamente la fecha que el usuario tiene seleccionada en las tarjetas
+    const dateOnly = selectedDate || new Date().toLocaleDateString('en-CA');
+    setForm({ patientId: '', date: dateOnly + 'T08:00', duration: 30, type: 'INITIAL_CONSULTATION', orthodontistId: '' });
     setShowModal(true);
   };
 
@@ -666,12 +667,11 @@ export default function Appointments() {
                 <input
                   type="date"
                   required
-                  value={form.date?.split('T')[0] || form.date || ''}
+                  value={form.date?.split('T')[0] || selectedDate}
                   min={new Date().toISOString().split('T')[0]}
                   onChange={e => {
                     const newDate = e.target.value;
-                    // Mantener la hora actual si ya hay una seleccionada
-                    const currentTime = form.date?.split('T')[1] || '';
+                    const currentTime = form.date?.split('T')[1] || '08:00';
                     setForm({ ...form, date: newDate + 'T' + currentTime });
                   }}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

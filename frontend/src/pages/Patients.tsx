@@ -23,11 +23,38 @@ function getDaysInMonth(month: number, year: number): number {
   return new Date(year, month, 0).getDate();
 }
 
+const COUNTRY_CODES = [
+  { code: '+593', label: '🇪🇨 Ecuador', flag: 'EC' },
+  { code: '+1', label: '🇺🇸 EE.UU./Canadá', flag: 'US' },
+  { code: '+52', label: '🇲🇽 México', flag: 'MX' },
+  { code: '+34', label: '🇪🇸 España', flag: 'ES' },
+  { code: '+54', label: '🇦🇷 Argentina', flag: 'AR' },
+  { code: '+56', label: '🇨🇱 Chile', flag: 'CL' },
+  { code: '+57', label: '🇨🇴 Colombia', flag: 'CO' },
+  { code: '+51', label: '🇵🇪 Perú', flag: 'PE' },
+  { code: '+58', label: '🇻🇪 Venezuela', flag: 'VE' },
+  { code: '+507', label: '🇵🇦 Panamá', flag: 'PA' },
+  { code: '+506', label: '🇨🇷 Costa Rica', flag: 'CR' },
+  { code: '+502', label: '🇬🇹 Guatemala', flag: 'GT' },
+  { code: '+503', label: '🇸🇻 El Salvador', flag: 'SV' },
+  { code: '+504', label: '🇭🇳 Honduras', flag: 'HN' },
+  { code: '+505', label: '🇳🇮 Nicaragua', flag: 'NI' },
+  { code: '+44', label: '🇬🇧 Reino Unido', flag: 'GB' },
+  { code: '+33', label: '🇫🇷 Francia', flag: 'FR' },
+  { code: '+49', label: '🇩🇪 Alemania', flag: 'DE' },
+  { code: '+39', label: '🇮🇹 Italia', flag: 'IT' },
+  { code: '+55', label: '🇧🇷 Brasil', flag: 'BR' },
+  { code: '+598', label: '🇺🇾 Uruguay', flag: 'UY' },
+  { code: '+595', label: '🇵🇾 Paraguay', flag: 'PY' },
+  { code: '+591', label: '🇧🇴 Bolivia', flag: 'BO' },
+];
+
 const emptyForm = {
   firstName: '',
   lastName: '',
   birthDate: '',
-  phone: '',
+  phonePrefix: '+593',
+  phoneNumber: '',
   email: '',
   address: '',
 };
@@ -69,11 +96,22 @@ export default function Patients() {
 
   const openEditModal = (patient: Patient) => {
     setEditingPatient(patient);
+    // Separar el teléfono en prefijo + número
+    let pPrefix = '+593';
+    let pNumber = patient.phone || '';
+    for (const cc of COUNTRY_CODES) {
+      if (patient.phone?.startsWith(cc.code.replace('+', ''))) {
+        pPrefix = cc.code;
+        pNumber = patient.phone.slice(cc.code.length - 1);
+        break;
+      }
+    }
     setForm({
       firstName: patient.firstName,
       lastName: patient.lastName,
       birthDate: patient.birthDate ? patient.birthDate.split('T')[0] : '',
-      phone: patient.phone,
+      phonePrefix: pPrefix,
+      phoneNumber: pNumber,
       email: patient.email || '',
       address: patient.address || '',
     });
@@ -84,7 +122,16 @@ export default function Patients() {
     e.preventDefault();
     const birthStr = form.birthDate;
     const isComplete = birthStr && birthStr.split('-').filter(Boolean).length === 3;
-    const payload = { ...form, birthDate: isComplete ? new Date(birthStr + 'T12:00:00').toISOString() : null };
+    // Combinar prefijo + número en phone (limpiar el + para guardar solo dígitos)
+    const cleanPhone = (form.phonePrefix + form.phoneNumber).replace(/^\+|\D/g, '');
+    const payload = {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      phone: cleanPhone,
+      email: form.email || undefined,
+      address: form.address || undefined,
+      birthDate: isComplete ? new Date(birthStr + 'T12:00:00').toISOString() : null,
+    };
 
     if (editingPatient) {
       axios.put(`/api/patients/${editingPatient.id}`, payload)
@@ -386,13 +433,25 @@ export default function Patients() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono *</label>
-                <input
-                  required
-                  type="text"
-                  value={form.phone}
-                  onChange={e => setForm({ ...form, phone: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={form.phonePrefix}
+                    onChange={e => setForm({ ...form, phonePrefix: e.target.value })}
+                    className="w-2/5 border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    {COUNTRY_CODES.map(cc => (
+                      <option key={cc.code} value={cc.code}>{cc.code} {cc.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    required
+                    type="tel"
+                    placeholder="Número de celular"
+                    value={form.phoneNumber}
+                    onChange={e => setForm({ ...form, phoneNumber: e.target.value.replace(/\D/g, '') })}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
