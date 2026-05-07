@@ -1,4 +1,4 @@
-# Red Dental - Node.js
+# Red Dental - Docker multi-stage
 FROM node:20-alpine AS backend
 
 WORKDIR /app/backend
@@ -27,4 +27,4 @@ COPY --from=backend /app/backend/prisma ./backend/prisma
 COPY --from=frontend /app/frontend/dist ./frontend/dist
 
 EXPOSE 5000
-CMD cd backend && npx prisma db push && node dist/server.js
+CMD ["sh", "-c", "cd backend && npx prisma db push && node dist/server.js"]
