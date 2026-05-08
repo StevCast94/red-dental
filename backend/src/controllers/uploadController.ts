@@ -1,43 +1,36 @@
 import { Response } from 'express';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import sharp from 'sharp';
+import { createClient } from '@supabase/supabase-js';
 import { AuthRequest } from '../middlewares/authMiddleware';
 
-const UPLOADS_DIR = path.join(__dirname, '../../uploads');
-const PHOTOS_DIR = path.join(UPLOADS_DIR, 'photos');
+// Inicializar Supabase
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
 
-// Asegurar que existe el directorio
-if (!fs.existsSync(PHOTOS_DIR)) {
-  fs.mkdirSync(PHOTOS_DIR, { recursive: true });
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('Faltan SUPABASE_URL o SUPABASE_SERVICE_KEY en .env');
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, PHOTOS_DIR);
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `evo-${uniqueSuffix}${ext}`);
-  },
-});
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const BUCKET = 'evolutions';
+
+// Multer: guardar en memoria (no en disco)
+const storage = multer.memoryStorage();
 
 const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowed.includes(ext)) {
+  const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (allowed.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`Formato no permitido: ${ext}. Usa JPG, PNG, GIF o WebP.`));
+    cb(new Error(`Formato no permitido: ${file.mimetype}. Usa JPG, PNG, GIF o WebP.`));
   }
 };
 
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB (para fotos de cámara)
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
 
 export const uploadPhoto = async (req: AuthRequest, res: Response) => {
@@ -46,41 +39,61 @@ export const uploadPhoto = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'No se seleccionó ningún archivo' });
     }
 
-    const absolutePath = req.file.path;
-    const ext = path.extname(absolutePath).toLowerCase();
+    const originalBuffer = req.file.buffer;
+    const ext = req.file.mimetype === 'image/jpeg' ? 'jpg'
+              : req.file.mimetype === 'image/png' ? 'png'
+              : req.file.mimetype === 'image/webp' ? 'webp'
+              : 'jpg'; // fallback
 
-    // Procesar con sharp excepto GIF (formato no soportado por sharp)
-    if (ext !== '.gif') {
+    let processedBuffer: Buffer;
+    const uniqueId = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const filename = `evo-${uniqueId}.${ext}`;
+
+    if (req.file.mimetype === 'image/gif') {
+      // GIF no se procesa con sharp
+      processedBuffer = originalBuffer;
+    } else {
       try {
-        let pipeline = sharp(absolutePath);
+        let pipeline = sharp(originalBuffer);
         const metadata = await pipeline.metadata();
 
-        // Redimensionar si el ancho supera 1200px (manteniendo aspect ratio)
+        // Redimensionar si el ancho supera 1200px
         if (metadata.width && metadata.width > 1200) {
           pipeline = pipeline.resize(1200);
         }
 
-        if (ext === '.png') {
-          await pipeline.png({ quality: 80 }).toFile(absolutePath + '.tmp');
-        } else if (ext === '.webp') {
-          await pipeline.webp({ quality: 80 }).toFile(absolutePath + '.tmp');
-        } else {
-          // jpg, jpeg u otros — convertir a JPEG con calidad 80
-          await pipeline.jpeg({ quality: 80 }).toFile(absolutePath + '.tmp');
-        }
-
-        // Sobrescribir original
-        fs.copyFileSync(absolutePath + '.tmp', absolutePath);
-        fs.unlinkSync(absolutePath + '.tmp');
+        // Convertir a JPEG con calidad 80 para optimizar
+        processedBuffer = await pipeline.jpeg({ quality: 80 }).toBuffer();
+        // Actualizar extensión porque sharp convierte a JPEG
+        filename.replace(`.${ext}`, '.jpg');
       } catch (sharpError: any) {
-        console.warn('Sharp processing failed, saving original:', sharpError.message);
-        // Si sharp falla, guardamos el archivo original sin procesar
+        console.warn('Sharp processing failed, uploading original:', sharpError.message);
+        processedBuffer = originalBuffer;
       }
     }
 
-    const filePath = `/uploads/photos/${req.file.filename}`;
-    res.json({ url: filePath, filename: req.file.filename });
+    // Subir a Supabase Storage
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .upload(filename, processedBuffer, {
+        contentType: req.file.mimetype === 'image/gif' ? 'image/gif' : 'image/jpeg',
+        cacheControl: '31536000', // 1 año
+        upsert: false,
+      });
+
+    if (error) {
+      console.error('Supabase upload error:', error);
+      return res.status(500).json({ error: 'Error al subir archivo al almacenamiento' });
+    }
+
+    // Obtener URL pública
+    const { data: urlData } = supabase.storage
+      .from(BUCKET)
+      .getPublicUrl(filename);
+
+    res.json({ url: urlData.publicUrl, filename });
   } catch (error: any) {
+    console.error('Upload error:', error);
     res.status(500).json({ error: error.message || 'Error al subir archivo' });
   }
 };

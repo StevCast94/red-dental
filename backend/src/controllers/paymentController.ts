@@ -72,6 +72,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         patientId,
         treatmentId,
         appointmentId: appointmentId || null,
+        createdByUserId: req.user?.id,
       },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true } },

@@ -43,6 +43,7 @@ export const createEvolution = async (req: AuthRequest, res: Response) => {
         observations: observations || '',
         photoBefore: photoBefore || null,
         photoAfter: photoAfter || null,
+        createdByUserId: req.user?.id,
       },
     });
     console.log(`[AUDIT] User ${req.user?.id} created evolution ${evolution.id} for treatment ${treatmentId}`);

@@ -64,8 +64,8 @@ app.use(morgan('short'));
 // ─── Parsing ─────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 
-// ─── Servir archivos subidos ─────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// ─── Servir archivos subidos (deprecated: ahora se usa Supabase Storage) ──
+// app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ─── Rutas API ───────────────────────────────────────────────
 app.use('/api/health', healthRoutes);
