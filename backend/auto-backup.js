@@ -7,6 +7,8 @@
  * Ejecución programada (openclaw cron):
  *   Diario a las 23:00 (América/Guayaquil)
  *   node auto-backup.js https://red-dental-production.up.railway.app stevens admin123
+ *   Para backup FULL (con imágenes en base64), pasar --full como 5to argumento:
+ *   node auto-backup.js https://red-dental-production.up.railway.app stevens admin123 --full
  * 
  * Ejemplo manual (local):
  *   node auto-backup.js
@@ -20,6 +22,7 @@ const path = require('path');
 const BASE_URL = process.argv[2] || 'http://localhost:5000';
 const ADMIN_USER = process.argv[3] || 'stevens';
 const ADMIN_PASS = process.argv[4] || 'admin123';
+const FULL_BACKUP = process.argv[5] === '--full';
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
 function httpRequest(url, options, body) {
@@ -79,8 +82,9 @@ async function main() {
   const filename = `backup-${timestamp}.json`;
   const filepath = path.join(BACKUP_DIR, filename);
 
-  console.log('⏳ Ejecutando backup global...');
-  const backup = await httpRequest(`${BASE_URL}/api/admin/backup-all`, {
+  const endpoint = FULL_BACKUP ? '/api/admin/backup-all-full' : '/api/admin/backup-all';
+  console.log(`⏳ Ejecutando backup${FULL_BACKUP ? ' completo con imágenes' : ' (sin imágenes)'}...`);
+  const backup = await httpRequest(`${BASE_URL}${endpoint}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -117,7 +121,14 @@ async function main() {
   console.log(`\n🎉 Backup automático finalizado.`);
   
   // Output para consumo por script (JSON en última línea)
-  const resultLine = JSON.stringify({ success: true, filename, sizeMB, clinics: backup.clinics?.length, patients: totalPatients, treatments: totalTreatments, timestamp });
+  let totalImages = 0;
+  if (FULL_BACKUP && backup.clinics) {
+    for (const c of backup.clinics) {
+      totalImages += c.imagesCount || 0;
+    }
+  }
+
+  const resultLine = JSON.stringify({ success: true, filename, sizeMB, clinics: backup.clinics?.length || backup.totalClinics, patients: totalPatients, treatments: totalTreatments, images: totalImages, fullBackup: FULL_BACKUP, timestamp });
   console.log(`RESULT:${resultLine}`);
 }
 
