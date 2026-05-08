@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import Layout from '../components/Layout';
 
@@ -52,6 +52,7 @@ export default function Payments() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [filteredTreatments, setFilteredTreatments] = useState<Treatment[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [form, setForm] = useState({
@@ -65,11 +66,51 @@ export default function Payments() {
   });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [selectedPatientName, setSelectedPatientName] = useState('');
+  const patientSearchRef = useRef<HTMLDivElement>(null);
+
+  // Filtrar pacientes según búsqueda
+  const filteredPatients = patients.filter(p => {
+    const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
+    return fullName.includes(patientSearch.toLowerCase());
+  });
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (patientSearchRef.current && !patientSearchRef.current.contains(e.target as Node)) {
+        setShowPatientDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Cargar tratamientos activos del paciente seleccionado
+  useEffect(() => {
+    if (form.patientId) {
+      axios.get(`/api/treatments?patientId=${form.patientId}&active=true`)
+        .then(r => {
+          const data = r.data?.data ?? r.data;
+          setFilteredTreatments(data);
+          // Si el tratamiento seleccionado ya no está en la lista, limpiarlo
+          if (form.treatmentId) {
+            const stillThere = data.some((t: Treatment) => t.id === form.treatmentId);
+            if (!stillThere) setForm(f => ({ ...f, treatmentId: '' }));
+          }
+        })
+        .catch(() => setFilteredTreatments([]));
+    } else {
+      setFilteredTreatments([]);
+      setForm(f => ({ ...f, treatmentId: '' }));
+    }
+  }, [form.patientId]);
 
   useEffect(() => {
     loadPayments();
     axios.get('/api/patients').then(r => setPatients(r.data?.data ?? r.data)).catch(() => {});
-    axios.get('/api/treatments?active=true').then(r => setTreatments(r.data?.data ?? r.data)).catch(() => {});
   }, [page]);
 
   const loadPayments = () => {
@@ -83,6 +124,9 @@ export default function Payments() {
   const openNew = () => {
     setEditingPayment(null);
     setForm({ amount: '', method: 'CASH', date: new Date().toISOString().split('T')[0], note: '', patientId: '', treatmentId: '', appointmentId: '' });
+    setPatientSearch('');
+    setSelectedPatientName('');
+    setFilteredTreatments([]);
     setShowModal(true);
   };
 
@@ -97,7 +141,20 @@ export default function Payments() {
       treatmentId: p.treatment.id,
       appointmentId: p.appointment?.id || '',
     });
+    setPatientSearch(`${p.patient.firstName} ${p.patient.lastName}`);
+    setSelectedPatientName(`${p.patient.firstName} ${p.patient.lastName}`);
     setShowModal(true);
+    // Cargar tratamientos para edición
+    axios.get(`/api/treatments?patientId=${p.patient.id}&active=true`)
+      .then(r => setFilteredTreatments(r.data?.data ?? r.data))
+      .catch(() => {});
+  };
+
+  const selectPatient = (patient: Patient) => {
+    setForm(f => ({ ...f, patientId: patient.id, treatmentId: '' }));
+    setPatientSearch(`${patient.firstName} ${patient.lastName}`);
+    setSelectedPatientName(`${patient.firstName} ${patient.lastName}`);
+    setShowPatientDropdown(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -238,23 +295,65 @@ export default function Payments() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">{editingPayment ? 'Editar Pago' : 'Registrar Pago'}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
+              <div ref={patientSearchRef} className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Paciente</label>
-                <select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })} className="w-full px-3 py-2 border rounded-lg" required>
-                  <option value="">Seleccionar...</option>
-                  {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}
-                </select>
+                <input
+                  type="text"
+                  value={patientSearch}
+                  onChange={e => {
+                    setPatientSearch(e.target.value);
+                    setShowPatientDropdown(true);
+                    if (!editingPayment) {
+                      setForm(f => ({ ...f, patientId: '', treatmentId: '' }));
+                    }
+                  }}
+                  onFocus={() => setShowPatientDropdown(true)}
+                  placeholder="Buscar paciente..."
+                  className="w-full px-3 py-2 border rounded-lg"
+                  required={!editingPayment}
+                  autoComplete="off"
+                />
+                {showPatientDropdown && patientSearch && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredPatients.length > 0 ? (
+                      filteredPatients.map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => selectPatient(p)}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${
+                            form.patientId === p.id ? 'bg-blue-100 font-medium' : ''
+                          }`}
+                        >
+                          {p.firstName} {p.lastName}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-400">
+                        {patients.length === 0 ? 'Cargando pacientes...' : 'Sin resultados'}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {form.patientId && selectedPatientName && !showPatientDropdown && (
+                  <p className="text-xs text-green-600 mt-1">✓ {selectedPatientName}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tratamiento</label>
                 <select value={form.treatmentId} onChange={e => setForm({ ...form, treatmentId: e.target.value })} className="w-full px-3 py-2 border rounded-lg" required>
-                  <option value="">Seleccionar...</option>
-                  {treatments.map(t => (
+                  <option value="">
+                    {form.patientId ? 'Seleccionar tratamiento activo...' : 'Primero selecciona un paciente'}
+                  </option>
+                  {filteredTreatments.map(t => (
                     <option key={t.id} value={t.id}>
-                      {treatmentLabels[t.type] || t.type} - {t.patient.firstName} {t.patient.lastName}
+                      {treatmentLabels[t.type] || t.type}
                     </option>
                   ))}
                 </select>
+                {form.patientId && filteredTreatments.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">⚠️ Este paciente no tiene tratamientos activos</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Monto ($)</label>

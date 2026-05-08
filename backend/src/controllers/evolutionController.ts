@@ -60,16 +60,29 @@ export const createEvolution = async (req: AuthRequest, res: Response) => {
 export const updateEvolution = async (req: AuthRequest, res: Response) => {
   try {
     const { observations, photoBefore, photoAfter } = req.body;
+    
+    // Verificar que la evolución pertenezca a la clínica del usuario
+    const evolution = await prisma.evolution.findFirst({
+      where: {
+        id: req.params.id,
+        treatment: {
+          patient: { clinicId: req.user?.clinicId },
+        },
+      },
+    });
+    if (!evolution) return res.status(404).json({ error: 'Evolución no encontrada en esta clínica' });
+    
     const data: any = {};
     if (observations !== undefined) data.observations = observations;
     if (photoBefore !== undefined) data.photoBefore = photoBefore;
     if (photoAfter !== undefined) data.photoAfter = photoAfter;
     
-    const evolution = await prisma.evolution.update({
+    const updated = await prisma.evolution.update({
       where: { id: req.params.id },
       data,
     });
-    res.json(evolution);
+    console.log(`[AUDIT] User ${req.user?.id} updated evolution ${updated.id}`);
+    res.json(updated);
   } catch (error) {
     console.error(error);
     res.status(400).json({ error: 'Error al actualizar evolución' });

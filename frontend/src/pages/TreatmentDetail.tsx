@@ -120,9 +120,13 @@ export default function TreatmentDetail() {
   const { id } = useParams();
   const [treatment, setTreatment] = useState<Treatment | null>(null);
   const [showEvoModal, setShowEvoModal] = useState(false);
+  const [editingEvolution, setEditingEvolution] = useState<Evolution | null>(null);
   const [evoForm, setEvoForm] = useState({ observations: '' });
   const [evoPhotos, setEvoPhotos] = useState<{ type: 'before' | 'after'; file: File; preview: string }[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [evoExistingPhotos, setEvoExistingPhotos] = useState<{ before: string | null; after: string | null }>({ before: null, after: null });
+  const [keepBefore, setKeepBefore] = useState(true);
+  const [keepAfter, setKeepAfter] = useState(true);
   const beforeInputRef = useRef<HTMLInputElement>(null);
   const afterInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState<'before' | 'after' | null>(null);
@@ -175,7 +179,17 @@ export default function TreatmentDetail() {
     if (files.length > 0) handlePhotoSelect(type, files[0]);
   };
 
-  const handleAddEvolution = async (e: React.FormEvent) => {
+  const openEditEvo = (evo: Evolution) => {
+    setEditingEvolution(evo);
+    setEvoForm({ observations: evo.observations });
+    setEvoPhotos([]);
+    setEvoExistingPhotos({ before: evo.photoBefore, after: evo.photoAfter });
+    setKeepBefore(!!evo.photoBefore);
+    setKeepAfter(!!evo.photoAfter);
+    setShowEvoModal(true);
+  };
+
+  const handleSubmitEvolution = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setUploading(true);
@@ -183,7 +197,17 @@ export default function TreatmentDetail() {
       let photoBeforeUrl: string | null = null;
       let photoAfterUrl: string | null = null;
 
-      // Subir fotos al servidor
+      if (editingEvolution) {
+        // Modo edición: determinar URLs finales
+        if (keepBefore && evoExistingPhotos.before) {
+          photoBeforeUrl = evoExistingPhotos.before;
+        }
+        if (keepAfter && evoExistingPhotos.after) {
+          photoAfterUrl = evoExistingPhotos.after;
+        }
+      }
+
+      // Subir fotos nuevas (reemplazan si no se mantienen las existentes)
       for (const p of evoPhotos) {
         const formData = new FormData();
         formData.append('photo', p.file);
@@ -194,21 +218,31 @@ export default function TreatmentDetail() {
         else photoAfterUrl = res.data.url;
       }
 
-      await axios.post('/api/evolutions', {
-        treatmentId: id,
-        observations: evoForm.observations,
-        photoBefore: photoBeforeUrl,
-        photoAfter: photoAfterUrl,
-      });
+      if (editingEvolution) {
+        await axios.put(`/api/evolutions/${editingEvolution.id}`, {
+          observations: evoForm.observations,
+          photoBefore: photoBeforeUrl,
+          photoAfter: photoAfterUrl,
+        });
+      } else {
+        await axios.post('/api/evolutions', {
+          treatmentId: id,
+          observations: evoForm.observations,
+          photoBefore: photoBeforeUrl,
+          photoAfter: photoAfterUrl,
+        });
+      }
 
       setShowEvoModal(false);
+      setEditingEvolution(null);
       setEvoForm({ observations: '' });
       evoPhotos.forEach(p => URL.revokeObjectURL(p.preview));
       setEvoPhotos([]);
+      setEvoExistingPhotos({ before: null, after: null });
       const r = await axios.get(`/api/treatments/${id}`);
       setTreatment(r.data);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al agregar evolución');
+      alert(err.response?.data?.error || 'Error al guardar evolución');
     } finally {
       setUploading(false);
     }
@@ -335,6 +369,15 @@ export default function TreatmentDetail() {
               <p className="text-gray-700 text-sm whitespace-pre-wrap">{evo.observations}</p>
 
               {/* Fotos */}
+              <div className="flex justify-end mt-2">
+                <button
+                  onClick={() => openEditEvo(evo)}
+                  className="text-blue-600 hover:underline text-xs"
+                >
+                  Editar
+                </button>
+              </div>
+
               {(evo.photoBefore || evo.photoAfter) && (
                 <div className="flex gap-4 mt-3">
                   {evo.photoBefore && (
@@ -369,12 +412,12 @@ export default function TreatmentDetail() {
         </div>
       </div>
 
-      {/* Modal Nueva Evolución */}
+      {/* Modal Nueva/Editar Evolución */}
       {showEvoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8">
           <div className="bg-white rounded-xl p-6 w-full max-w-xl mx-4">
-            <h2 className="text-xl font-bold mb-4">Agregar Evolución</h2>
-            <form onSubmit={handleAddEvolution} className="space-y-4">
+            <h2 className="text-xl font-bold mb-4">{editingEvolution ? 'Editar Evolución' : 'Agregar Evolución'}</h2>
+            <form onSubmit={handleSubmitEvolution} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
                 <textarea
@@ -388,30 +431,76 @@ export default function TreatmentDetail() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <PhotoUploadZone
-                  label="Foto Antes"
-                  type="before"
-                  photo={beforePhoto}
-                  dragOver={dragOver === 'before'}
-                  inputRef={beforeInputRef}
-                  onSelect={handlePhotoSelect}
-                  onRemove={handleRemovePhoto}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                />
-                <PhotoUploadZone
-                  label="Foto Después"
-                  type="after"
-                  photo={afterPhoto}
-                  dragOver={dragOver === 'after'}
-                  inputRef={afterInputRef}
-                  onSelect={handlePhotoSelect}
-                  onRemove={handleRemovePhoto}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                />
+                <div>
+                  {/* Foto Antes */}
+                  {editingEvolution && evoExistingPhotos.before && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Foto actual (Antes):</p>
+                      <div className="relative">
+                        <img
+                          src={evoExistingPhotos.before}
+                          alt="Antes actual"
+                          className="w-full h-24 object-cover rounded-lg border"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 mt-1 text-xs text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={keepBefore}
+                          onChange={e => setKeepBefore(e.target.checked)}
+                        />
+                        Mantener foto actual
+                      </label>
+                    </div>
+                  )}
+                  <PhotoUploadZone
+                    label={editingEvolution ? 'Nueva foto Antes (opcional)' : 'Foto Antes'}
+                    type="before"
+                    photo={beforePhoto}
+                    dragOver={dragOver === 'before'}
+                    inputRef={beforeInputRef}
+                    onSelect={handlePhotoSelect}
+                    onRemove={handleRemovePhoto}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  />
+                </div>
+                <div>
+                  {/* Foto Después */}
+                  {editingEvolution && evoExistingPhotos.after && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Foto actual (Después):</p>
+                      <div className="relative">
+                        <img
+                          src={evoExistingPhotos.after}
+                          alt="Después actual"
+                          className="w-full h-24 object-cover rounded-lg border"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 mt-1 text-xs text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={keepAfter}
+                          onChange={e => setKeepAfter(e.target.checked)}
+                        />
+                        Mantener foto actual
+                      </label>
+                    </div>
+                  )}
+                  <PhotoUploadZone
+                    label={editingEvolution ? 'Nueva foto Después (opcional)' : 'Foto Después'}
+                    type="after"
+                    photo={afterPhoto}
+                    dragOver={dragOver === 'after'}
+                    inputRef={afterInputRef}
+                    onSelect={handlePhotoSelect}
+                    onRemove={handleRemovePhoto}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -429,16 +518,18 @@ export default function TreatmentDetail() {
                       Subiendo...
                     </span>
                   ) : (
-                    'Guardar Evolución'
+                    editingEvolution ? 'Guardar Cambios' : 'Guardar Evolución'
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowEvoModal(false);
+                    setEditingEvolution(null);
                     evoPhotos.forEach(p => URL.revokeObjectURL(p.preview));
                     setEvoPhotos([]);
                     setEvoForm({ observations: '' });
+                    setEvoExistingPhotos({ before: null, after: null });
                   }}
                   className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg hover:bg-gray-300 font-medium"
                 >
