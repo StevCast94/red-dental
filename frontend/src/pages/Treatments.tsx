@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import Layout from '../components/Layout';
@@ -44,6 +44,32 @@ export default function Treatments() {
   const [form, setForm] = useState({ patientId: '', type: 'METAL_BRACES', estimatedMonths: 12, phases: '' });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [selectedPatientName, setSelectedPatientName] = useState('');
+  const patientSearchRef = useRef<HTMLDivElement>(null);
+
+  const filteredPatients = patients.filter(p => {
+    const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
+    return fullName.includes(patientSearch.toLowerCase());
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (patientSearchRef.current && !patientSearchRef.current.contains(e.target as Node)) {
+        setShowPatientDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectPatient = (patient: Patient) => {
+    setForm(f => ({ ...f, patientId: patient.id }));
+    setPatientSearch(`${patient.firstName} ${patient.lastName}`);
+    setSelectedPatientName(`${patient.firstName} ${patient.lastName}`);
+    setShowPatientDropdown(false);
+  };
 
   const handleDeleteTreatment = async (id: string) => {
     if (!confirm('¿Estás seguro de eliminar este tratamiento? Se eliminarán todas las evoluciones, pagos y usos de inventario asociados.')) return;
@@ -117,38 +143,58 @@ export default function Treatments() {
         </button>
       </div>
 
-      {/* Active treatments: Grid */}
+      {/* Active treatments: Table */}
       {activeTab === 'active' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {treatments.map(t => (
-            <div key={t.id} className="bg-white rounded-xl shadow hover:shadow-lg transition p-6 border border-gray-100 relative">
-              <Link to={`/treatments/${t.id}`} className="block">
-                <div className="flex justify-between items-start mb-3">
-                  <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full">
-                    {treatmentLabels[t.type] || t.type}
-                  </span>
-                  {t.active && (
+        <div className="bg-white rounded-xl shadow overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="text-left px-4 py-3">Tipo</th>
+                <th className="text-left px-4 py-3">Paciente</th>
+                <th className="text-left px-4 py-3">Inicio</th>
+                <th className="text-center px-4 py-3">Duración</th>
+                <th className="text-center px-4 py-3">Evoluciones</th>
+                <th className="text-center px-4 py-3">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {treatments.map(t => (
+                <tr key={t.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <Link to={`/treatments/${t.id}`} className="text-blue-600 hover:underline font-medium">
+                      {treatmentLabels[t.type] || t.type}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-gray-800">
+                    {t.patient.firstName} {t.patient.lastName}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {new Date(t.startDate).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-center text-gray-600">
+                    {t.estimatedMonths} meses
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full">
+                      {t._count.evolutions}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
                     <span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">
                       Activo
                     </span>
-                  )}
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                  {t.patient.firstName} {t.patient.lastName}
-                </h3>
-                <div className="text-sm text-gray-500 space-y-1">
-                  <p>Inicio: {new Date(t.startDate).toLocaleDateString()}</p>
-                  <p>Duración: {t.estimatedMonths} meses</p>
-                  <p>Evoluciones: {t._count.evolutions}</p>
-                </div>
-              </Link>
-            </div>
-          ))}
-          {treatments.length === 0 && (
-            <div className="col-span-full text-center py-12 text-gray-500">
-              No hay tratamientos activos
-            </div>
-          )}
+                  </td>
+                </tr>
+              ))}
+              {treatments.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-gray-500">
+                    No hay tratamientos activos
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -231,19 +277,47 @@ export default function Treatments() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Nuevo Tratamiento</h2>
             <form onSubmit={handleCreate} className="space-y-4">
-              <div>
+              <div ref={patientSearchRef} className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Paciente</label>
-                <select
-                  value={form.patientId}
-                  onChange={e => setForm({ ...form, patientId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                <input
+                  type="text"
+                  value={patientSearch}
+                  onChange={e => {
+                    setPatientSearch(e.target.value);
+                    setShowPatientDropdown(true);
+                    setForm(f => ({ ...f, patientId: '' }));
+                  }}
+                  onFocus={() => setShowPatientDropdown(true)}
+                  placeholder="Buscar paciente..."
+                  className="w-full px-3 py-2 border rounded-lg"
                   required
-                >
-                  <option value="">Seleccionar paciente...</option>
-                  {patients.map(p => (
-                    <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
-                  ))}
-                </select>
+                  autoComplete="off"
+                />
+                {showPatientDropdown && patientSearch && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredPatients.length > 0 ? (
+                      filteredPatients.map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => selectPatient(p)}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${
+                            form.patientId === p.id ? 'bg-blue-100 font-medium' : ''
+                          }`}
+                        >
+                          {p.firstName} {p.lastName}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-400">
+                        {patients.length === 0 ? 'Cargando pacientes...' : 'Sin resultados'}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {form.patientId && selectedPatientName && !showPatientDropdown && (
+                  <p className="text-xs text-green-600 mt-1">✓ {selectedPatientName}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>

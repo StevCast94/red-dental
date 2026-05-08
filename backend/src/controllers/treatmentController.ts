@@ -25,7 +25,7 @@ export const getTreatments = async (req: AuthRequest, res: Response) => {
           payments: { select: { amount: true } },
           _count: { select: { evolutions: true } },
         },
-        orderBy: { startDate: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
