@@ -18,7 +18,8 @@ interface AuditEntry {
  */
 export async function auditLog(entry: AuditEntry) {
   try {
-    await prisma.auditLog.create({
+    const db = prisma;
+    await db.auditLog.create({
       data: {
         userId: entry.userId || null,
         username: entry.username || null,

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { clinicFilter } from '../utils/clinicFilter';
+import { auditLog, getAuditInfo } from '../utils/auditLog';
 
 const prisma = new PrismaClient();
 
