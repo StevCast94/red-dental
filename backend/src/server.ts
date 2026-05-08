@@ -38,17 +38,8 @@ app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 
-// ─── Rate Limiting global ────────────────────────────────────
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 300, // límite por IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en 15 minutos.' },
-});
-app.use(limiter);
-
-// Rate limit más estricto para login
+// ─── Rate Limiting ───────────────────────────────────────────
+// Rate limit estricto para login (evita fuerza bruta)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -57,6 +48,26 @@ const authLimiter = rateLimit({
   message: { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo en 15 minutos.' },
 });
 app.use('/api/auth', authLimiter);
+
+// Rate limit generoso para rutas admin (backups, impersonación)
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes administrativas. Intenta de nuevo en 15 minutos.' },
+});
+app.use('/api/admin', adminLimiter);
+
+// Rate limit general para el resto de API
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en 15 minutos.' },
+});
+app.use('/api', apiLimiter);
 
 // ─── Logging ─────────────────────────────────────────────────
 app.use(morgan('short'));
