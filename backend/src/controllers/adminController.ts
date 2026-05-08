@@ -686,3 +686,93 @@ export const exportAllBackup = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+/**
+ * GET /api/admin/backup-all-full
+ * Exporta backup completo de todas las clínicas INCLUYENDO imágenes de evoluciones
+ * en base64 desde Supabase Storage.
+ */
+export const exportAllBackupFull = async (req: AuthRequest, res: Response) => {
+  try {
+    const clinics = await prisma.clinic.findMany({ orderBy: { name: 'asc' } });
+    const backups: any[] = [];
+
+    for (const clinic of clinics) {
+      const patients = await prisma.patient.findMany({ where: { clinicId: clinic.id, deletedAt: null } });
+      const patientIds = patients.map(p => p.id);
+
+      const treatments = patientIds.length > 0
+        ? await prisma.treatment.findMany({ where: { patientId: { in: patientIds } }, include: { evolutions: true, payments: true, inventoryUsage: true } })
+        : [];
+
+      const appointments = patientIds.length > 0
+        ? await prisma.appointment.findMany({ where: { patientId: { in: patientIds }, deletedAt: null } })
+        : [];
+
+      const toothRecords = patientIds.length > 0
+        ? await prisma.toothRecord.findMany({ where: { patientId: { in: patientIds } } })
+        : [];
+
+      const users = await prisma.user.findMany({ where: { clinicId: clinic.id }, select: { id: true, name: true, email: true, username: true, role: true, active: true } });
+      const subscription = await prisma.clinicSubscription.findUnique({ where: { clinicId: clinic.id } });
+
+      // Descargar imágenes de evoluciones desde Supabase
+      const allEvolutions = treatments.flatMap(t => t.evolutions).filter(e => e.photoBefore || e.photoAfter);
+      const images: Record<string, string> = {};
+
+      for (const evo of allEvolutions) {
+        for (const field of ['photoBefore', 'photoAfter'] as const) {
+          const url = evo[field];
+          if (url && url.startsWith('http')) {
+            try {
+              const response = await fetch(url);
+              if (response.ok) {
+                const buffer = await response.arrayBuffer();
+                const base64 = Buffer.from(buffer).toString('base64');
+                const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
+                images[`${evo.id}-${field}`] = `data:image/${ext};base64,${base64}`;
+              }
+            } catch {
+              console.warn(`[BACKUP_IMG] No se pudo descargar: ${url?.substring(0, 60)}...`);
+            }
+          }
+        }
+      }
+
+      backups.push({
+        clinic: {
+          id: clinic.id,
+          name: clinic.name,
+          slug: clinic.slug,
+          address: clinic.address,
+          phone: clinic.phone,
+          contactEmail: clinic.contactEmail,
+          active: clinic.active,
+        },
+        users,
+        subscription,
+        patients,
+        treatments,
+        appointments,
+        toothRecords,
+        imagesCount: Object.keys(images).length,
+        images,
+      });
+    }
+
+    const result = {
+      exportedAt: new Date().toISOString(),
+      totalClinics: clinics.length,
+      hasImages: true,
+      clinics: backups,
+    };
+
+    const filename = `backup-full-${new Date().toISOString().split('T')[0]}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(result);
+  } catch (error: any) {
+    console.error('Export full backup error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};

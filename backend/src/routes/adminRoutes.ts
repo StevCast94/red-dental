@@ -20,6 +20,7 @@ import {
   exportClinicBackup,
   restoreClinicBackup,
   exportAllBackup,
+  exportAllBackupFull,
 } from '../controllers/adminController';
 
 const router = Router();
@@ -56,5 +57,6 @@ router.post('/impersonate/:clinicId', authenticate, requireRole('SUPER_ADMIN'), 
 router.get('/clinics/:id/backup', authenticate, requireRole('SUPER_ADMIN'), exportClinicBackup);
 router.post('/clinics/:id/restore', authenticate, requireRole('SUPER_ADMIN'), restoreClinicBackup);
 router.get('/backup-all', authenticate, requireRole('SUPER_ADMIN'), exportAllBackup);
+router.get('/backup-all-full', authenticate, requireRole('SUPER_ADMIN'), exportAllBackupFull);
 
 export default router;
