@@ -112,9 +112,24 @@ export const updatePayment = async (req: AuthRequest, res: Response) => {
 
 export const deletePayment = async (req: AuthRequest, res: Response) => {
   try {
+    const payment = await prisma.payment.findFirst({
+      where: { id: req.params.id, patient: clinicFilter(req.user) as any },
+    });
+    if (!payment) return res.status(404).json({ error: 'Pago no encontrado' });
+    
     await prisma.payment.delete({ where: { id: req.params.id } });
+    
+    console.log(`[AUDIT] User ${req.user?.id} deleted payment ${req.params.id}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'DELETE',
+      entity: 'Payment',
+      entityId: req.params.id,
+      details: { amount: payment.amount, method: payment.method },
+    });
     res.json({ message: 'Pago eliminado' });
   } catch (error) {
+    console.error(error);
     res.status(400).json({ error: 'Error al eliminar pago' });
   }
 };

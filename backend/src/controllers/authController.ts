@@ -7,11 +7,12 @@ const prisma = new PrismaClient();
 
 export const login = async (req: Request, res: Response) => {
   const ip = req.ip || req.socket.remoteAddress || null;
+  const userAgent = req.headers['user-agent'] || null;
 
   const logLogin = async (username: string, clinicId: string | null, success: boolean) => {
     try {
       await prisma.loginLog.create({
-        data: { username, clinicId, success, ip },
+        data: { username, clinicId, success, ip, userAgent },
       });
     } catch { /* silent */ }
   };

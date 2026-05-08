@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { clinicFilter } from '../utils/clinicFilter';
+import { auditLog, getAuditInfo } from '../utils/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -81,6 +82,13 @@ export const createTreatment = async (req: AuthRequest, res: Response) => {
       },
     });
     console.log(`[AUDIT] User ${req.user?.id} created treatment ${treatment.id} for patient ${patientId}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'CREATE',
+      entity: 'Treatment',
+      entityId: treatment.id,
+      details: { patientId, type: treatment.type },
+    });
     res.status(201).json(treatment);
   } catch (error) {
     console.error(error);
@@ -145,6 +153,13 @@ export const deleteTreatment = async (req: AuthRequest, res: Response) => {
     });
 
     console.log(`[AUDIT] User ${req.user?.id} deleted treatment ${id}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'DELETE',
+      entity: 'Treatment',
+      entityId: id,
+      details: { type: treatment.type, patientId: treatment.patientId },
+    });
     res.json({ success: true, message: 'Tratamiento eliminado correctamente' });
   } catch (error) {
     console.error(error);

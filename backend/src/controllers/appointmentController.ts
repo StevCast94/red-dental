@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { clinicFilter } from '../utils/clinicFilter';
+import { auditLog, getAuditInfo } from '../utils/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -66,6 +67,13 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
       },
     });
     console.log(`[AUDIT] User ${req.user?.id} created appointment ${appointment.id} for patient ${patientId}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'CREATE',
+      entity: 'Appointment',
+      entityId: appointment.id,
+      details: { patientId, type: appointment.type, date: appointment.date },
+    });
     res.status(201).json(appointment);
   } catch (error) {
     console.error(error);
@@ -170,6 +178,13 @@ export const updateAppointmentStatus = async (req: AuthRequest, res: Response) =
       },
     });
     res.json(appointment);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'UPDATE',
+      entity: 'Appointment',
+      entityId: id,
+      details: { field: 'status', newValue: status },
+    });
   } catch (error) {
     res.status(400).json({ error: 'Error al actualizar cita' });
   }
@@ -207,6 +222,13 @@ export const updateAppointment = async (req: AuthRequest, res: Response) => {
       },
     });
     res.json(appointment);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'UPDATE',
+      entity: 'Appointment',
+      entityId: id,
+      details: { updatedFields: Object.keys(data) },
+    });
   } catch (error) {
     console.error(error);
     res.status(400).json({ error: 'Error al actualizar cita' });
@@ -235,6 +257,12 @@ export const deleteAppointment = async (req: AuthRequest, res: Response) => {
     });
 
     res.json({ message: 'Cita eliminada correctamente' });
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'DELETE',
+      entity: 'Appointment',
+      entityId: id,
+    });
   } catch (error) {
     console.error(error);
     res.status(400).json({ error: 'Error al eliminar cita' });

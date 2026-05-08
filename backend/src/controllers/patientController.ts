@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { clinicFilter } from '../utils/clinicFilter';
+import { auditLog, getAuditInfo } from '../utils/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -76,6 +77,13 @@ export const createPatient = async (req: AuthRequest, res: Response) => {
     };
     const patient = await prisma.patient.create({ data });
     console.log(`[AUDIT] User ${req.user?.id} created patient ${patient.id}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'CREATE',
+      entity: 'Patient',
+      entityId: patient.id,
+      details: { name: `${patient.firstName} ${patient.lastName}` },
+    });
     res.status(201).json(patient);
   } catch (error: any) {
     console.error('Error al crear paciente:', error);
@@ -105,6 +113,12 @@ export const deletePatient = async (req: AuthRequest, res: Response) => {
     });
     if (result.count === 0) return res.status(404).json({ error: 'Paciente no encontrado' });
     console.log(`[AUDIT] User ${req.user?.id} soft-deleted patient ${req.params.id}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'DELETE',
+      entity: 'Patient',
+      entityId: req.params.id,
+    });
     res.json({ message: 'Paciente eliminado correctamente' });
   } catch (error) {
     res.status(400).json({ error: 'Error al eliminar paciente' });

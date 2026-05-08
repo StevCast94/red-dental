@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { clinicFilter } from '../utils/clinicFilter';
+import { auditLog, getAuditInfo } from '../utils/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -47,6 +48,13 @@ export const createEvolution = async (req: AuthRequest, res: Response) => {
       },
     });
     console.log(`[AUDIT] User ${req.user?.id} created evolution ${evolution.id} for treatment ${treatmentId}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'CREATE',
+      entity: 'Evolution',
+      entityId: evolution.id,
+      details: { treatmentId, hasPhotos: !!(photoBefore || photoAfter) },
+    });
     res.status(201).json(evolution);
   } catch (error: any) {
     console.error(error);
@@ -82,6 +90,13 @@ export const updateEvolution = async (req: AuthRequest, res: Response) => {
       data,
     });
     console.log(`[AUDIT] User ${req.user?.id} updated evolution ${updated.id}`);
+    auditLog({
+      ...getAuditInfo(req),
+      action: 'UPDATE',
+      entity: 'Evolution',
+      entityId: updated.id,
+      details: { changedFields: Object.keys(data) },
+    });
     res.json(updated);
   } catch (error) {
     console.error(error);

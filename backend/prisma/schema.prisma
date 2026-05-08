@@ -44,6 +44,7 @@ model LoginLog {
   clinic    Clinic?  @relation(fields: [clinicId], references: [id])
   success   Boolean
   ip        String?
+  userAgent String?
   createdAt DateTime @default(now())
 }
 
@@ -193,4 +194,16 @@ model InventoryUsage {
   item        InventoryItem @relation(fields: [itemId], references: [id])
   treatmentId String
   treatment   Treatment     @relation(fields: [treatmentId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  username  String?
+  action    String   // CREATE, UPDATE, DELETE
+  entity    String   // Treatment, Evolution, Payment, Patient, Appointment
+  entityId  String?
+  details   String?  // JSON con datos relevantes
+  clinicId  String?
+  createdAt DateTime @default(now())
 }
