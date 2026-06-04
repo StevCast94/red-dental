@@ -24,6 +24,7 @@ import uploadRoutes from './routes/uploadRoutes';
 import profileRoutes from './routes/profileRoutes';
 import reminderRoutes from './routes/reminderRoutes';
 import reportsRoutes from './routes/reportsRoutes';
+import metricsRoutes from './routes/metricsRoutes';
 
 dotenv.config();
 
@@ -95,6 +96,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 // ─── Frontend estático ───────────────────────────────────────
 const frontendBuildPath = path.join(__dirname, '../../frontend/dist');
